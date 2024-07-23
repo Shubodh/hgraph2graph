@@ -12,9 +12,10 @@ class MolGraph(object):
     BOND_LIST = [Chem.rdchem.BondType.SINGLE, Chem.rdchem.BondType.DOUBLE, Chem.rdchem.BondType.TRIPLE, Chem.rdchem.BondType.AROMATIC] 
     MAX_POS = 20
 
-    def __init__(self, smiles):
-        self.smiles = smiles
-        self.mol = get_mol(smiles)
+    def __init__(self, mol):
+        # self.smiles = smiles
+        # self.mol = get_mol(smiles)
+        self.mol = mol
 
         self.mol_graph = self.build_mol_graph()
         self.clusters, self.atom_cls = self.find_clusters()
@@ -102,7 +103,8 @@ class MolGraph(object):
 
         order.append( (0, None, 0) ) #last backtrack at root
         
-        mol = get_mol(self.smiles)
+        # mol = get_mol(self.smiles) # modified this to remove smiles input dependency completely
+        mol = self.mol #added
         for a in mol.GetAtoms():
             a.SetAtomMapNum( a.GetIdx() + 1 )
 
