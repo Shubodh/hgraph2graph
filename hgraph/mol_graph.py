@@ -38,7 +38,8 @@ class MolGraph(object):
         ssr = [tuple(x) for x in Chem.GetSymmSSSR(mol)]
         clusters.extend(ssr)
 
-        if 0 not in clusters[0]: #root is not node[0]
+        # if 0 not in clusters[0]: #root is not node[0]
+        if clusters and 0 not in clusters[0]: #root is not node[0]
             for i,cls in enumerate(clusters):
                 if 0 in cls:
                     clusters = [clusters[i]] + clusters[:i] + clusters[i+1:]
