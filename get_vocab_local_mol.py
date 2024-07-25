@@ -3,6 +3,7 @@
 from hgraph import *
 from rdkit import Chem
 from multiprocessing import Pool
+import os
 
 def process_old(data):
     vocab = set()
@@ -42,7 +43,16 @@ def MolFromSMILES():
     return mols
 
 def MolLigandsFromFile():
-    pass
+    ligand_molecules=[]
+    basepath='data/ligands/'
+    
+    for filename in os.listdir(basepath):
+        xyz_file=os.path.join(basepath, filename)
+        ligand_mol=Chem.MolFromXYZFile(xyz_file)
+        if ligand_mol is not None:
+            Chem.Kekulize(ligand_mol, clearAromaticFlags=True)
+        ligand_molecules.append(ligand_mol)
+    return ligand_molecules
 
 if __name__ == "__main__":
 
@@ -50,15 +60,17 @@ if __name__ == "__main__":
     # parser.add_argument('--ncpu', type=int, default=1)
     # args = parser.parse_args()
     ncpu = 16
-    mols = MolFromSMILES()
+    # mols = MolFromSMILES()
+    mols = MolLigandsFromFile()
     print("Processing for mols: ", mols)
 
 
     data_folder = 'data/chembl/'
-    vocab_folder = 'data/chembl/vocab/'
+    # vocab_folder = 'data/chembl/vocab/'
+    vocab_folder='data/ligands/vocab/'
 
     data_file = 'all_small.txt'
-    vocab_file = 'vocab_small_MolObj.txt'
+    vocab_file = 'vocab_small_ligandMolObj.txt'
 
 
     # with open(f"{data_folder}/{data_file}", 'r') as file:
