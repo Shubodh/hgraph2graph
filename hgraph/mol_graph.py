@@ -103,6 +103,8 @@ class MolGraph(object):
 
         order.append( (0, None, 0) ) #last backtrack at root
         
+        # TODO: Molecule recreation: new clean mol object might be necessary here (to ensure
+        # fresh atom map numbers), so using self.mol might be wrong. Need to correct outer code accordingly. 
         # mol = get_mol(self.smiles) # modified this to remove smiles input dependency completely
         mol = self.mol #added
         for a in mol.GetAtoms():
