@@ -30,8 +30,8 @@ def process(mols):
 def MolFromSMILES():
     smiles_list = [
         "CSc1ccccc1C(=O)Nc1ccc2c(c1)OCCO2",
-        "CC(C)NC(=N)c1ccc(OCCCCCOc2ccc(C(=N)NC(C)C)cc2C(=O)O)c(C(=O)O)c1",
-        "O=C(Cn1cn[nH]c1=O)N1CC2(CCCC2)c2ccccc21"
+        # "CC(C)NC(=N)c1ccc(OCCCCCOc2ccc(C(=N)NC(C)C)cc2C(=O)O)c(C(=O)O)c1",
+        # "O=C(Cn1cn[nH]c1=O)N1CC2(CCCC2)c2ccccc21"
     ]
     mols = []
     for smiles in smiles_list:
