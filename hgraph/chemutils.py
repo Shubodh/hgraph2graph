@@ -124,14 +124,14 @@ def get_assm_cands(mol, atoms, inter_label, cluster, inter_size):
     rank = { x:y for x,y in zip(atom_map, rank) }
 
     pos, icls = zip(*inter_label)
-    if inter_size == 1:
+    if inter_size == 1: #single atom interface: it selects the interface atom and all atoms in the cluster with a different rank
         cands = [pos[0]] + [ x for x in cluster if rank[x] != rank[pos[0]] ] 
     
-    elif icls[0] == icls[1]: #symmetric case
+    elif icls[0] == icls[1]: #symmetric case # symmetric interfaces: it creates pairs of atoms from the cluster and selects those with different rank pairs from the interface atoms
         shift = cluster[inter_size - 1:] + cluster[:inter_size - 1]
         cands = zip(cluster, shift)
         cands = [pos] + [ (x,y) for x,y in cands if (rank[min(x,y)],rank[max(x,y)]) != (rank[min(pos)], rank[max(pos)]) ]
-    else: 
+    else: # asymmetric interfaces: it creates all possible pairs of atoms from the cluster and selects those with different rank pairs from the interface atoms.
         shift = cluster[inter_size - 1:] + cluster[:inter_size - 1]
         cands = zip(cluster + shift, shift + cluster)
         cands = [pos] + [ (x,y) for x,y in cands if (rank[x],rank[y]) != (rank[pos[0]], rank[pos[1]]) ]
@@ -149,7 +149,7 @@ def get_inter_label(mol, atoms, inter_atoms):
     inter_label = []
     for a in new_mol.GetAtoms():
         idx = idxfunc(a)
-        if idx in inter_atoms and is_anchor(a, inter_atoms):
+        if idx in inter_atoms and is_anchor(a, inter_atoms): # TODO-Later: Why is `is_anchor` used here? It's confusing why neighbours are again checked
             inter_label.append( (idx, get_anchor_smiles(new_mol, idx)) )
 
     for a in new_mol.GetAtoms():

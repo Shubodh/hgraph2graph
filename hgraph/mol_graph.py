@@ -60,6 +60,9 @@ class MolGraph(object):
             bonds = [c for c in nei_cls if len(clusters[c]) == 2]
             rings = [c for c in nei_cls if len(clusters[c]) > 4] #need to change to 2
 
+            print(f"Atom {atom}: nei_cls = {nei_cls}, bonds = {bonds}, rings = {rings}")
+            print(f" len(clusters) = {len(clusters)}")
+
             if len(nei_cls) > 2 and len(bonds) >= 2:
                 clusters.append([atom])
                 c2 = len(clusters) - 1
@@ -67,19 +70,25 @@ class MolGraph(object):
                 for c1 in nei_cls:
                     graph.add_edge(c1, c2, weight = 100)
 
+                print(f"  Condition 1: Added node {c2} and edges {[(c1, c2) for c1 in nei_cls]}")
+
             elif len(rings) > 2: #Bee Hives, len(nei_cls) > 2 
                 clusters.append([atom]) #temporary value, need to change
                 c2 = len(clusters) - 1
                 graph.add_node(c2)
                 for c1 in nei_cls:
                     graph.add_edge(c1, c2, weight = 100)
+                print(f"  Condition 2: Added node {c2} and edges {[(c1, c2) for c1 in nei_cls]}")
             else:
                 for i,c1 in enumerate(nei_cls):
                     for c2 in nei_cls[i + 1:]:
                         inter = set(clusters[c1]) & set(clusters[c2])
                         graph.add_edge(c1, c2, weight = len(inter))
 
+                        print(f"  Condition 3: Added edge ({c1}, {c2}) with weight {len(inter)}")
+
         n, m = len(graph.nodes), len(graph.edges)
+        print(f"Nodes: {n}, Edges: {m}")
         assert n - m <= 1 #must be connected
         return graph if n - m == 1 else nx.maximum_spanning_tree(graph)
 
