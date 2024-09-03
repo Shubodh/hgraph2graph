@@ -108,22 +108,49 @@ def copy_edit_mol(mol):
     return new_mol
 
 def get_clique_mol(mol, atoms):
-    smiles = Chem.MolFragmentToSmiles(mol, atoms, kekuleSmiles=True)
-    new_mol = Chem.MolFromSmiles(smiles, sanitize=False)
-    new_mol = copy_edit_mol(new_mol).GetMol()
-    new_mol = sanitize(new_mol) 
-    #if tmp_mol is not None: new_mol = tmp_mol
-    return new_mol
+    #errorhandling
+    try:
+        smiles = Chem.MolFragmentToSmiles(mol, atoms, kekuleSmiles=True)
+        new_mol = Chem.MolFromSmiles(smiles, sanitize=False)
+        new_mol = copy_edit_mol(new_mol).GetMol()
+        new_mol = sanitize(new_mol) 
+        #if tmp_mol is not None: new_mol = tmp_mol
+        return new_mol
+    except:
+        return None
+
+def get_clique_mol_new(mol,atoms,highlights):
+    #errorhandling
+    try:
+        atom_maps=[] #
+        for a in mol.GetAtoms(): #
+            if a.GetIdx() in atoms: #
+                if a.GetIdx() in highlights: #
+                    atom_maps.append(a.GetAtomMapNum()) #
+        smiles = Chem.MolFragmentToSmiles(mol, atoms, kekuleSmiles=True)
+        new_mol = Chem.MolFromSmiles(smiles, sanitize=False)
+        new_mol = copy_edit_mol(new_mol).GetMol()
+        new_mol = sanitize(new_mol) 
+        highlight_clique = [] #
+        for a in new_mol.GetAtoms(): #
+            if a.GetAtomMapNum() in atom_maps: #
+                highlight_clique.append(a.GetIdx()) #
+        #if tmp_mol is not None: new_mol = tmp_mol 
+        return new_mol, highlight_clique #
+    except:
+        return None,highlights
+
 
 def get_assm_cands(mol, atoms, inter_label, cluster, inter_size):
     atoms = list(set(atoms))
     mol = get_clique_mol(mol, atoms)
+    if mol is None:
+        return None
     atom_map = [idxfunc(atom) for atom in mol.GetAtoms()]
     mol = set_atommap(mol)
     rank = Chem.CanonicalRankAtoms(mol, breakTies=False)
     rank = { x:y for x,y in zip(atom_map, rank) }
 
-    pos, icls = zip(*inter_label)
     if inter_size == 1:
         cands = [pos[0]] + [ x for x in cluster if rank[x] != rank[pos[0]] ] 
     
@@ -161,6 +188,39 @@ def is_anchor(atom, inter_atoms):
         if idxfunc(a) not in inter_atoms:
             return True
     return False
+
+# new interlabel function for metals
+def get_inter_label_metal(mol,atoms,inter_atoms,highlight_atoms_ligand):
+    inter_label = []
+    try:
+        new_mol,highlight_new_mol=get_clique_mol_new(mol,atoms,highlight_atoms_ligand)
+
+        if new_mol.GetNumBonds()==0:
+            inter_atom=list(inter_atoms)[0]
+            for a in new_mol.GetAtoms():
+                a.SetAtomMapNum(0)
+            # here we are changing back the atom map number for this clusters attached atoms to 2
+            for a in new_mol.GetAtoms(): # 
+                if a.GetIdx() in highlight_new_mol: #
+                    a.SetAtomMapNum(2) #
+            return new_mol, [(inter_atom, Chem.MolToSmiles(new_mol))]
+        
+        for a in new_mol.GetAtoms():
+            idx = idxfunc(a)
+            if idx in inter_atoms and is_anchor(a, inter_atoms):
+                inter_label.append( (idx, get_anchor_smiles(new_mol, idx)) )
+
+        for a in new_mol.GetAtoms():
+            a.SetAtomMapNum( 1 if idxfunc(a) in inter_atoms else 0 )
+        
+        # here we are changing back the atom map number for this clusters attached atoms to metal centre to 2
+        for a in new_mol.GetAtoms(): #
+            if a.GetIdx() in highlight_new_mol: #
+                a.SetAtomMapNum(2) #
+
+        return new_mol, inter_label
+    except:
+        return None,inter_label
             
 def get_anchor_smiles(mol, anchor, idxfunc=idxfunc):
     copy_mol = Chem.Mol(mol)
