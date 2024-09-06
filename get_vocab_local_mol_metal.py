@@ -5,12 +5,16 @@ from multiprocessing import Pool
 import rdkit
 import os
 from rdkit import Chem
+from rdkit.Chem import Draw
 from rdkit.Chem import AllChem
 import matplotlib.pyplot as plt
 from rdkit.Chem import Descriptors
 from rdkit.Chem import rdMolDescriptors
 from rdkit.Chem import rdDetermineBonds
 import sys
+import py3Dmol
+import base64
+
 current_dir = os.path.dirname(os.path.abspath(__file__))
 class_dir = os.path.join(current_dir, 'hgraph')
 sys.path.append(class_dir)
@@ -52,7 +56,6 @@ def read_molecule_file(file_path):
     return atoms
 
 def get_ligand_mols(folder_path):
-    import os
     data_folder=folder_path
     ligands_map={}
     mol_ligands_obj_map={}
@@ -74,6 +77,16 @@ def get_ligand_mols(folder_path):
         
         # function to extract ligands from the molecule by removing the metal centre.
         def get_ligand(mol, donor_atom, visited):
+            """
+            Identify the attached ligands in the metal chelate molecule.
+            What we need to do here is identify all the ligands attached to central Metal atom i.e. Fe.
+
+            In summary: we do BFS in one direction (the other direction than Fe). That's all to identify each ligand.
+
+            In detail: We just found the donor atoms which are conencted to Fe. Now that donor atom will be connected to another atom say X other than Fe obviously. Now we need to start from X and find all the atoms in its connected component. So the donor atom along with all the atoms in this connected component will be one ligand. 
+            
+            Important-Later: **Sometimes multiple donor atoms could be in same connected component, we will have to handle this case carefully too. (see below case, we have not yet tested for bottom 3 ligands)**
+            """
             ligand = []
             queue = list(donor_atom.GetNeighbors())
             
@@ -158,19 +171,28 @@ def get_ligand_mols(folder_path):
         molecule_names.append(mol_name)
     return molecule_names,mol_ligands_obj_map,mol_ligands_highlights_indexmap
 
+
 if __name__=="__main__":
+    # vocab_folder="data/good_full_small_vocab"
+    # vocab_file="good_full_small_vocab_500.txt"
+    # folderpath="data/good_full_small_500"
+
     vocab_folder="data/good_full_small_vocab"
-    vocab_file="good_full_small_vocab_500.txt"
-    folderpath="data/good_full_small_500"
+    vocab_file="good_debug_vocab_5.txt"
+    folderpath="data/good_debug_5"
+    print("Processing for folder: ", folderpath)
     
-    molecule_names,mol_ligands_obj_map,mol_ligands_highlighs_indexmap = get_ligand_mols(folderpath)
+    molecule_names,mol_ligands_obj_map,mol_ligands_highlights_indexmap = get_ligand_mols(folderpath)
+
+
+
     vocab_list=[]
     num=len(molecule_names)
 
     for i,mol in enumerate(molecule_names):
         print(mol)
         ligand_mols=mol_ligands_obj_map[mol]
-        highlights_ligand_mol=mol_ligands_highlighs_indexmap[mol]
+        highlights_ligand_mol=mol_ligands_highlights_indexmap[mol]
         vocab=process(mol,ligand_mols,highlights_ligand_mol)
         vocab_list.append(vocab)
         print(i)

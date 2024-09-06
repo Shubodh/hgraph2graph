@@ -97,7 +97,8 @@ class MolGraphMetal(object):
             if x in self.mol_tree:
                 sorted_child = sorted([ y for y in self.mol_tree[x] if y != fa ]) #better performance with fixed order
             else:
-                return None
+                raise Exception("Error in dfs of tree decomposition")
+                # return None
             for idx,y in enumerate(sorted_child):
                 self.mol_tree[x][y]['label'] = 0 
                 self.mol_tree[y][x]['label'] = idx + 1 #position encoding
