@@ -140,7 +140,7 @@ def get_assm_cands(mol, atoms, inter_label, cluster, inter_size):
 
 def get_inter_label(mol, atoms, inter_atoms):
     new_mol = get_clique_mol(mol, atoms)
-    if new_mol.GetNumBonds() == 0: 
+    if new_mol.GetNumBonds() == 0:  # happens if new clusters are added in tree_decomp(), i.e. c8 atom in your example (CH4)
         inter_atom = list(inter_atoms)[0]
         for a in new_mol.GetAtoms():
             a.SetAtomMapNum(0)
@@ -149,7 +149,7 @@ def get_inter_label(mol, atoms, inter_atoms):
     inter_label = []
     for a in new_mol.GetAtoms():
         idx = idxfunc(a)
-        if idx in inter_atoms and is_anchor(a, inter_atoms): # TODO-Later: Why is `is_anchor` used here? It's confusing why neighbours are again checked
+        if idx in inter_atoms and is_anchor(a, inter_atoms): 
             inter_label.append( (idx, get_anchor_smiles(new_mol, idx)) )
 
     for a in new_mol.GetAtoms():
@@ -160,6 +160,7 @@ def is_anchor(atom, inter_atoms):
     for a in atom.GetNeighbors():
         if idxfunc(a) not in inter_atoms:
             return True
+    # print("This point is reached in this example, exiting now to debug and understand")
     return False
             
 def get_anchor_smiles(mol, anchor, idxfunc=idxfunc):

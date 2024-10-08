@@ -99,7 +99,8 @@ if __name__ == "__main__":
         with open(args.train) as f:
             data = [line.strip("\r\n ").split()[0] for line in f]
 
-        random.shuffle(data)
+        print("removing ranodmizing for debugging")
+        # random.shuffle(data)
 
         batches = [data[i : i + args.batch_size] for i in range(0, len(data), args.batch_size)]
         func = partial(tensorize, vocab = args.vocab)

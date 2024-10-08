@@ -28,10 +28,16 @@ python get_vocab.py --ncpu 16 < data/chembl/all.txt > vocab.txt
 
 2. Preprocess training data:
 ```
-python preprocess.py --train data/chembl/all.txt --vocab data/chembl/all.txt --ncpu 16 --mode single
+python preprocess.py --train data/chembl/all.txt --vocab data/chembl/vocab.txt --ncpu 16 --mode single
 mkdir train_processed
 mv tensor* train_processed/
 ```
+
+The above is giving some multiprocessing errors, for now use `preprocess_local.py`
+```
+python preprocess_local.py --train data/chembl/all_small.txt --vocab data/chembl/vocab/vocab_small.txt --ncpu 8 --mode single
+```
+This will save one `tensors-0.pkl` locally, then move it to `train_processed/` folder.
 
 3. Train graph generation model
 ```

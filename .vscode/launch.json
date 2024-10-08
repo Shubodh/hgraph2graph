@@ -4,12 +4,20 @@
 	// For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
 	"version": "0.2.0",
 	"configurations": [
+
 		{
 			"name": "Python Debugger: Current File",
 			"type": "debugpy",
 			"request": "launch",
 			"program": "${file}",
-			"console": "integratedTerminal"
+			"console": "integratedTerminal",
+            "args": [
+                "--train", "data/chembl/all_small.txt",    // CHANGED_HERE: Your train file argument
+                "--vocab", "data/chembl/vocab/vocab_small.txt",  // CHANGED_HERE: Vocab argument
+                "--ncpu", "8",                               // CHANGED_HERE: CPU argument
+                "--mode", "single"                           // CHANGED_HERE: Mode argument
+            ]
+
 		}
 	]
 }

@@ -7,7 +7,7 @@ from hgraph.nnutils import *
 
 add = lambda x,y : x + y if type(x) is int else (x[0] + y, x[1] + y)
 
-class MolGraph(object):
+class MolGraphMetal(object):
 
     BOND_LIST = [Chem.rdchem.BondType.SINGLE, Chem.rdchem.BondType.DOUBLE, Chem.rdchem.BondType.TRIPLE, Chem.rdchem.BondType.AROMATIC] 
     MAX_POS = 20
@@ -96,6 +96,7 @@ class MolGraph(object):
         def dfs(order, pa, prev_sib, x, fa):
             pa[x] = fa 
             sorted_child = sorted([ y for y in self.mol_tree[x] if y != fa ]) #better performance with fixed order
+            print(sorted_child)
             for idx,y in enumerate(sorted_child):
                 self.mol_tree[x][y]['label'] = 0 
                 self.mol_tree[y][x]['label'] = idx + 1 #position encoding
@@ -115,7 +116,7 @@ class MolGraph(object):
         # TODO: Molecule recreation: new clean mol object might be necessary here (to ensure
         # fresh atom map numbers), so using self.mol might be wrong. Need to correct outer code accordingly. 
         # mol = get_mol(self.smiles) # modified this to remove smiles input dependency completely
-        mol = self.mol #added
+        mol = Chem.Mol(self.mol) #clone the object
         for a in mol.GetAtoms():
             a.SetAtomMapNum( a.GetIdx() + 1 )
 
@@ -154,7 +155,7 @@ class MolGraph(object):
         for bond in mol.GetBonds():
             a1 = bond.GetBeginAtom().GetIdx()
             a2 = bond.GetEndAtom().GetIdx()
-            btype = MolGraph.BOND_LIST.index( bond.GetBondType() )
+            btype = MolGraphMetal.BOND_LIST.index( bond.GetBondType() )
             graph[a1][a2]['label'] = btype
             graph[a2][a1]['label'] = btype
 
@@ -162,9 +163,9 @@ class MolGraph(object):
     
     @staticmethod
     def tensorize(mol_batch, vocab, avocab):
-        mol_batch = [MolGraph(x) for x in mol_batch]
-        tree_tensors, tree_batchG = MolGraph.tensorize_graph([x.mol_tree for x in mol_batch], vocab)
-        graph_tensors, graph_batchG = MolGraph.tensorize_graph([x.mol_graph for x in mol_batch], avocab)
+        mol_batch = [MolGraphMetal(x) for x in mol_batch]
+        tree_tensors, tree_batchG = MolGraphMetal.tensorize_graph([x.mol_tree for x in mol_batch], vocab)
+        graph_tensors, graph_batchG = MolGraphMetal.tensorize_graph([x.mol_graph for x in mol_batch], avocab)
         tree_scope = tree_tensors[-1]
         graph_scope = graph_tensors[-1]
 
@@ -242,7 +243,7 @@ if __name__ == "__main__":
         #    a.SetAtomMapNum( a.GetIdx() )
         #print(Chem.MolToSmiles(mol))
 
-        hmol = MolGraph(s)
+        hmol = MolGraphMetal(s)
         print(hmol.clusters)
         #print(list(hmol.mol_tree.edges))
         print(nx.get_node_attributes(hmol.mol_tree, 'label'))
