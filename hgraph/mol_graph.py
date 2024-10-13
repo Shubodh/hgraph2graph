@@ -206,7 +206,7 @@ class MolGraph(object):
                 edge_dict[(u, v)] = eid = len(edge_dict) + 1
                 G[u][v]['mess_idx'] = eid
                 agraph[v].append(eid)
-                bgraph.append([])
+                bgraph.append([]) # need to be careful with larger datasets. 
 
             for u, v in G.edges:
                 eid = edge_dict[(u, v)]
