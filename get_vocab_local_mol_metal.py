@@ -171,6 +171,7 @@ def get_ligand_mols(folder_path):
         molecule_names.append(mol_name)
     return molecule_names,mol_ligands_obj_map,mol_ligands_highlights_indexmap
 
+# add the charge condition above. (-2,-3 or 0) - to consider only those molecules whose total charge of ligands is either -3,-2 or 0. -1 wont work. The small_14 dataset does not have any molecule with charge -1 so proceeding without making that change for now.
 
 if __name__=="__main__":
     # vocab_folder="data/good_full_small_vocab"
@@ -178,8 +179,8 @@ if __name__=="__main__":
     # folderpath="data/good_full_small_500"
 
     vocab_folder="data/good_full_small_vocab"
-    vocab_file="good_debug_vocab_5.txt"
-    folderpath="data/good_debug_5"
+    vocab_file="small_3.txt"
+    folderpath="data/metal_small"
     print("Processing for folder: ", folderpath)
     
     molecule_names,mol_ligands_obj_map,mol_ligands_highlights_indexmap = get_ligand_mols(folderpath)
