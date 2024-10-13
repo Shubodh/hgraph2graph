@@ -159,12 +159,24 @@ class MolGraphMetal(object):
             #                 if type(label) is int: #in case one bond is assigned multiple times
             #                     self.mol_graph[ch_atom][fa_atom]['label'] = (label, child_order)
         return order
-       
+    
+    """
+    modifying build_mol_graph to include whether the atoms of the ligand are connected to the metal centre or not as a feature of each atom(node) in the graph.
+    """
     def build_mol_graph(self):
         mol = self.mol
+        highlight_atom=self.highlight
+
         graph = nx.DiGraph(Chem.rdmolops.GetAdjacencyMatrix(mol))
+
+        if highlight_atom is not None:
+            highlight_set=set(highlight_atom)
+        else:
+            highlight_set=set()
+
         for atom in mol.GetAtoms():
             graph.nodes[atom.GetIdx()]['label'] = (atom.GetSymbol(), atom.GetFormalCharge())
+            graph.nodes[atom.GetIdx()]['highlight'] = 1 if atom.GetIdx() in highlight_set else 0
 
         for bond in mol.GetBonds():
             a1 = bond.GetBeginAtom().GetIdx()
@@ -176,15 +188,29 @@ class MolGraphMetal(object):
         return graph
     
     @staticmethod
-    def tensorize(mol_batch, vocab, avocab):
-        mol_batch = [MolGraphMetal(x) for x in mol_batch]
-        tree_tensors, tree_batchG = MolGraphMetal.tensorize_graph([x.mol_tree for x in mol_batch], vocab)
-        graph_tensors, graph_batchG = MolGraphMetal.tensorize_graph([x.mol_graph for x in mol_batch], avocab)
-        tree_scope = tree_tensors[-1]
-        graph_scope = graph_tensors[-1]
+    def tensorize_metal(complexes_names_batch, complexes_ligands, complexes_highlights, vocab, avocab):
+        mol_batch_metal_map = {}
+        mol_tree_metal_map = {}
+        mol_graph_metal_map = {}
 
-        max_cls_size = max( [len(c) for x in mol_batch for c in x.clusters] )
-        cgraph = torch.zeros(len(tree_batchG) + 1, max_cls_size).int()
+        for idx, complex in enumerate(complexes_names_batch):
+            ligands_set = complexes_ligands[complex]
+            ligands_highlights = complexes_highlights[complex]
+
+            mol_batch_metal_map[complex] = [MolGraphMetal(ligand,ligands_highlights[i+1]) for i,ligand in enumerate(ligands_set)]
+
+            mol_tree_metal_map[complex] = [x.mol_tree for x in mol_batch_metal_map[complex]]
+            mol_graph_metal_map[complex] = [x.mol_graph for x in mol_batch_metal_map[complex]]
+        
+        tree_tensors, tree_batchG = MolGraphMetal.tensorize_graph_metal(complexes_names_batch, mol_tree_metal_map, vocab)
+        graph_tensors, graph_batchG = MolGraphMetal.tensorize_graph_metal(complexes_names_batch, mol_graph_metal_map, avocab,('Fe',0), use_highlights=True)
+
+        tree_scope = tree_tensors[-1]
+        graph_scope = graph_tensors[-1] 
+
+        max_cls_size=max([len(c) for x in complexes_names_batch for mgm in mol_batch_metal_map[x] for c in mgm.clusters])
+        cgraph = torch.zeros(len(tree_batchG) + 1 + len(complexes_names_batch), max_cls_size).int()
+
         for v,attr in tree_batchG.nodes(data=True):
             bid = attr['batch_id']
             offset = graph_scope[bid][0]
@@ -192,59 +218,85 @@ class MolGraphMetal(object):
             tree_batchG.nodes[v]['cluster'] = cls = [x + offset for x in attr['cluster']]
             tree_batchG.nodes[v]['assm_cands'] = [add(x, offset) for x in attr['assm_cands']]
             cgraph[v, :len(cls)] = torch.IntTensor(cls)
-
+        
         all_orders = []
-        for i,hmol in enumerate(mol_batch):
-            offset = tree_scope[i][0]
-            order = [(x + offset, y + offset, z) for x,y,z in hmol.order[:-1]] + [(hmol.order[-1][0] + offset, None, 0)]
-            all_orders.append(order)
+        i = 0
+        for mol_list in mol_batch_metal_map.values():
+            for hmol in mol_list:
+                offset=tree_scope[i][0]
+                order = [(x + offset, y + offset, z) for x,y,z in hmol.order[:-1]] + [(hmol.order[-1][0] + offset, None, 0)]
+                all_orders.append(order)
+                i += 1
 
         tree_tensors = tree_tensors[:4] + (cgraph, tree_scope)
         return (tree_batchG, graph_batchG), (tree_tensors, graph_tensors), all_orders
-
-    @staticmethod
-    def tensorize_graph(graph_batch, vocab):
-        fnode,fmess = [None],[(0,0,0,0)] 
-        agraph,bgraph = [[]], [[]] 
+    
+    def tensorize_graph_metal(complexes_names_batch, mol_metal_map_batch, vocab, iron_tuple=('Fe', 'Fe:2'), use_highlights=False):
+        fnode, fmess = [None], [(0, 0, 0, 0)]
+        agraph, bgraph = [[]], [[]]
         scope = []
         edge_dict = {}
         all_G = []
 
-        for bid,G in enumerate(graph_batch):
-            offset = len(fnode)
-            scope.append( (offset, len(G)) )
-            G = nx.convert_node_labels_to_integers(G, first_label=offset)
-            all_G.append(G)
-            fnode.extend( [None for v in G.nodes] )
+        for bid, complex_name in enumerate(complexes_names_batch):
+            graphs = mol_metal_map_batch[complex_name]
 
-            for v, attr in G.nodes(data='label'):
-                G.nodes[v]['batch_id'] = bid
-                fnode[v] = vocab[attr]
-                agraph.append([])
+            iron_index = len(fnode)
+            fnode.append(vocab[iron_tuple])
+            agraph.append([])
 
-            for u, v, attr in G.edges(data='label'):
-                if type(attr) is tuple:
-                    fmess.append( (u, v, attr[0], attr[1]) )
+            for G in graphs:
+                offset = len(fnode)
+                scope.append((offset, len(G)))
+                G = nx.convert_node_labels_to_integers(G, first_label=offset)
+                all_G.append(G)
+                fnode.extend([None for v in G.nodes])
+
+                for v, attr in G.nodes(data='label'):
+                    G.nodes[v]['batch_id'] = bid
+                    fnode[v] = vocab[attr]
+                    agraph.append([])
+
+                if use_highlights:
+                    for v, attr in G.nodes(data='highlight'):
+                        if attr == 1:  # Check if the node is highlighted
+                            fmess.append((iron_index, v, 0, 0))  # Default bond type
+                            edge_dict[(iron_index, v)] = eid = len(edge_dict) + 1
+                            agraph[v].append(eid)
+                            bgraph.append([])
                 else:
-                    fmess.append( (u, v, attr, 0) )
-                edge_dict[(u, v)] = eid = len(edge_dict) + 1
-                G[u][v]['mess_idx'] = eid
-                agraph[v].append(eid)
-                bgraph.append([])
+                    for v, attr in G.nodes(data='label'):
+                        if ':2' in attr[1]:  # Check if the label contains ':2'
+                            fmess.append((iron_index, v, 0, 0))  # Default bond type
+                            edge_dict[(iron_index, v)] = eid = len(edge_dict) + 1
+                            agraph[v].append(eid)
+                            bgraph.append([])
 
-            for u, v in G.edges:
-                eid = edge_dict[(u, v)]
-                for w in G.predecessors(u):
-                    if w == v: continue
-                    bgraph[eid].append( edge_dict[(w, u)] )
+                for u, v, attr in G.edges(data='label'):
+                    if type(attr) is tuple:
+                        fmess.append((u, v, attr[0], attr[1]))
+                    else:
+                        fmess.append((u, v, attr, 0))
+                    edge_dict[(u, v)] = eid = len(edge_dict) + 1
+                    G[u][v]['mess_idx'] = eid
+                    agraph[v].append(eid)
+                    bgraph.append([])
 
-        fnode[0] = fnode[1]
+                for u, v in G.edges:
+                    eid = edge_dict[(u, v)]
+                    for w in G.predecessors(u):
+                        if w == v:
+                            continue
+                        bgraph[eid].append(edge_dict[(w, u)])
+
+        fnode[0] = fnode[1]  # Set the first node to the iron node
         fnode = torch.IntTensor(fnode)
         fmess = torch.IntTensor(fmess)
         agraph = create_pad_tensor(agraph)
         bgraph = create_pad_tensor(bgraph)
-        return (fnode, fmess, agraph, bgraph, scope), nx.union_all(all_G)
 
+        return (fnode, fmess, agraph, bgraph, scope), nx.union_all(all_G)
+        
 if __name__ == "__main__":
     import sys
     
@@ -264,3 +316,26 @@ if __name__ == "__main__":
         #print(nx.get_node_attributes(hmol.mol_tree, 'inter_label'))
         #print(nx.get_node_attributes(hmol.mol_tree, 'assm_cands'))
         #print(hmol.order)
+
+
+
+# 1. the common atom vocab - these are formal charges of the atoms
+
+# 2. I have added ('H', 0) to the common atom vocab SINCE it one of the attributes of the nodes in the graph has hydrogen as its atom with formal charge zero. 
+
+# 3. line 85 - do we need to update the clusters? in the original code, they have not updated the clusters.
+
+# 4. I have updated the PairVocabMetal class to include the Fe in the vocab object at the end of the list of the original vocab. I am defining the tuple of (smiles,ismiles) of iron as ('Fe','Fe')
+
+#5. For the fnode of Fe - adding info from vocab object for iron tuple to fnode. 
+
+#6. Fmess stores the bond type index (0-single, 1-double, 3-triple, 4-aromatic) between the nodes. the bond information between fe and other ligands should be stored in the fmess.
+
+
+# TODO
+
+#- ADD NEW BOND TYPE FOR THE FE - NODE BONDS
+# - ALSO STORE THE XYZ INFORMATION AS AN ATTRIBUTE OF THE NODES IN THE GRAPH
+
+# LATER
+# ADD ONE MORE COLUMN IN FMESS FOR STORING DISTANCE BETWEEN THE ATOMS IN THE GRAPH.
