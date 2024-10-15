@@ -12,10 +12,10 @@ class MolGraph(object):
     BOND_LIST = [Chem.rdchem.BondType.SINGLE, Chem.rdchem.BondType.DOUBLE, Chem.rdchem.BondType.TRIPLE, Chem.rdchem.BondType.AROMATIC] 
     MAX_POS = 20
 
-    def __init__(self, mol):
-        # self.smiles = smiles
-        # self.mol = get_mol(smiles)
-        self.mol = mol
+    def __init__(self, smiles):
+        self.smiles = smiles
+        self.mol = get_mol(smiles)
+        # self.mol = mol # changed by shubodh 
 
         self.mol_graph = self.build_mol_graph()
         self.clusters, self.atom_cls = self.find_clusters()
@@ -106,7 +106,8 @@ class MolGraph(object):
         # TODO: Molecule recreation: new clean mol object might be necessary here (to ensure
         # fresh atom map numbers), so using self.mol might be wrong. Need to correct outer code accordingly. 
         # mol = get_mol(self.smiles) # modified this to remove smiles input dependency completely
-        mol = self.mol #added
+        # mol = self.mol #added by shubodh
+        mol=get_mol(self.smiles)
         for a in mol.GetAtoms():
             a.SetAtomMapNum( a.GetIdx() + 1 )
 

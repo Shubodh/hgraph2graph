@@ -49,13 +49,18 @@ parser.add_argument('--print_iter', type=int, default=50)
 parser.add_argument('--save_iter', type=int, default=5000)
 
 args = parser.parse_args()
+print("arguments recieved\n")
 print(args)
 
 torch.manual_seed(args.seed)
 random.seed(args.seed)
 
+print("seed set\n")
+
 vocab = [x.strip("\r\n ").split() for x in open(args.vocab)] 
 args.vocab = PairVocab(vocab)
+
+print("pairvocab done\n")
 
 model = HierVAE(args).cuda()
 print("Model #Params: %dK" % (sum([x.nelement() for x in model.parameters()]) / 1000,))
@@ -80,6 +85,8 @@ else:
 param_norm = lambda m: math.sqrt(sum([p.norm().item() ** 2 for p in m.parameters()]))
 grad_norm = lambda m: math.sqrt(sum([p.grad.norm().item() ** 2 for p in m.parameters() if p.grad is not None]))
 
+print("ready for epochs")
+
 meters = np.zeros(6)
 for epoch in range(args.epoch):
     dataset = DataFolder(args.train, args.batch_size)
@@ -93,7 +100,10 @@ for epoch in range(args.epoch):
         nn.utils.clip_grad_norm_(model.parameters(), args.clip_norm)
         optimizer.step()
 
-        meters = meters + np.array([kl_div, loss.item(), wacc * 100, iacc * 100, tacc * 100, sacc * 100])
+        # meters = meters + np.array([kl_div, loss.item(), wacc * 100, iacc * 100, tacc * 100, sacc * 100])
+
+        # we need to move the tensors from cuda to cpu first before using numpy operations on them
+        meters = meters + np.array([kl_div, loss.item(), wacc.cpu()*100, iacc.cpu()*100, tacc.cpu()*100, sacc.cpu()*100])
 
         if total_step % args.print_iter == 0:
             meters /= args.print_iter

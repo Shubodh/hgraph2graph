@@ -104,9 +104,12 @@ if __name__ == "__main__":
         batches = [data[i : i + args.batch_size] for i in range(0, len(data), args.batch_size)]
         func = partial(tensorize, vocab = args.vocab)
         all_data = pool.map(func, batches)
+        print("All data recieved ")
         num_splits = len(all_data) // 1000
 
         le = (len(all_data) + num_splits - 1) // num_splits
+
+        print("Number of splits: ", num_splits)
 
         for split_id in range(num_splits):
             st = split_id * le

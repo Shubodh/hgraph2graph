@@ -93,3 +93,25 @@ python translate.py --test data/qed/valid.txt --vocab data/qed/vocab.txt --model
 The polymer generation code is in the `polymer/` folder. The polymer generation code is similar to `train_generator.py`, but the substructures are tailored for polymers. 
 For generating regular drug like molecules, we recommend to use `train_generator.py` in the root directory.
 
+
+**For Dependencies**
+
+1. Make sure to load cuda module 12.1 before running the file. 
+1. Create conda env with python 3.12
+2. ⁠install torch torchvision torchaudio using `pip3 install torch torchvision torhaudio` - should install 2.3 or 2.4 - it will work. 
+3. ⁠make sure numpy is installed - check with  `conda list`
+4. ⁠install rdkit using `conda install -c conda-forge rdkit` - before approving make sure it is the 2024 version.
+
+**Commands used to run**
+
+Extract required number of smiles strings to work with using the python file `xtract.py`
+
+1. `python3 get_vocab.py --ncpu 16 < data/chembl/all_small.txt > vocab_small.txt `
+python preprocess.py --train data/chembl/all.txt --vocab data/chembl/all.txt --ncpu 16 --mode single
+mkdir train_processed
+mv tensor* train_processed/
+2. `python3 preprocess.py --train data/chembl/all_small.txt --vocab data/chembl/vocab_small.txt --ncpu 16 --mode single`
+3. `mkdir train_processed`
+4. `mv tensor* train_processed/`
+5. `mkdir testsmall`
+6. `python train_generator.py --train train_processed/ --vocab data/chembl/vocab_small.txt --save_dir testsmall/`

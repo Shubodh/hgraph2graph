@@ -144,12 +144,14 @@ def get_clique_mol_new(mol,atoms,highlights):
 def get_assm_cands(mol, atoms, inter_label, cluster, inter_size):
     atoms = list(set(atoms))
     mol = get_clique_mol(mol, atoms)
-    if mol is None:
-        return None
+    # if mol is None: # added for debugging. 
+    #     return None
     atom_map = [idxfunc(atom) for atom in mol.GetAtoms()]
     mol = set_atommap(mol)
     rank = Chem.CanonicalRankAtoms(mol, breakTies=False)
     rank = { x:y for x,y in zip(atom_map, rank) }
+
+    pos, icls = zip(*inter_label)
 
     if inter_size == 1:
         cands = [pos[0]] + [ x for x in cluster if rank[x] != rank[pos[0]] ] 
