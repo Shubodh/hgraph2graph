@@ -2,6 +2,15 @@
 
 Our paper is at https://arxiv.org/pdf/2002.03230.pdf
 
+## Kushang's suggestions for installation
+- load cuda 12.1 module from ada
+
+for dependencies i did this - 
+1. Create conda env with python 3.12
+2. ⁠install torch torchvision torchaudio using pip3 install torch torchvision torhaudio
+3. ⁠make sure numpy is installed - check with  conda list
+4. ⁠install rdkit using conda install -c conda-forge rdkit - before approving make sure it is the 2024 version.
+
 ## Installation
 First install the dependencies via conda:
  * PyTorch >= 1.0.0
