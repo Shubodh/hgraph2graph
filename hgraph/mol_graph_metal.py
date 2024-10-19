@@ -82,7 +82,7 @@ class MolGraphMetal(object):
                         inter = set(clusters_tree[c1]) & set(clusters_tree[c2])
                         graph.add_edge(c1, c2, weight = len(inter))
 
-        self.clusters=clusters_tree
+        # self.clusters=clusters_tree # commenting this because the original code does not update the clusters
         n, m = len(graph.nodes), len(graph.edges)
         if n-m==1:
             mst=graph
@@ -117,7 +117,7 @@ class MolGraphMetal(object):
         # TODO: Molecule recreation: new clean mol object might be necessary here (to ensure
         # fresh atom map numbers), so using self.mol might be wrong. Need to correct outer code accordingly. 
         # mol = get_mol(self.smiles) # modified this to remove smiles input dependency completely
-        mol = self.mol #added
+        mol = Chem.RWMol(self.mol) #added
         for a in mol.GetAtoms():
             a.SetAtomMapNum( a.GetIdx() + 1 )
 
@@ -321,15 +321,17 @@ if __name__ == "__main__":
 
 # 1. the common atom vocab - these are formal charges of the atoms
 
+# 2. Changed mol=Chem.RWMol(self.mol) FROM mol=self.mol in the label_tree function because we need to create a fresh mol object for assm cands. 
+
 # 2. I have added ('H', 0) to the common atom vocab SINCE it one of the attributes of the nodes in the graph has hydrogen as its atom with formal charge zero. 
 
-# 3. line 85 - do we need to update the clusters? in the original code, they have not updated the clusters.
+# 3. line 85 - do we need to update the clusters? in the original code, they have not updated the clusters. -NO WE DO NOT - REMOVED IT. 
 
-# 4. I have updated the PairVocabMetal class to include the Fe in the vocab object at the end of the list of the original vocab. I am defining the tuple of (smiles,ismiles) of iron as ('Fe','Fe')
+# 4. I have updated the PairVocabMetal class to include the Fe in the vocab object at the end of the list of the original vocab. I am defining the tuple of (smiles,ismiles) of iron as ('Fe','Fe') 
 
 #5. For the fnode of Fe - adding info from vocab object for iron tuple to fnode. 
 
-#6. Fmess stores the bond type index (0-single, 1-double, 3-triple, 4-aromatic) between the nodes. the bond information between fe and other ligands should be stored in the fmess.
+#6. Fmess stores the bond type index (0-single, 1-double, 3-triple, 4-aromatic) between the nodes. the bond information between fe and other ligands should be stored in the fmess. - THIS IS AT THE ATOM LEVEL. 
 
 
 # TODO
@@ -338,4 +340,4 @@ if __name__ == "__main__":
 # - ALSO STORE THE XYZ INFORMATION AS AN ATTRIBUTE OF THE NODES IN THE GRAPH
 
 # LATER
-# ADD ONE MORE COLUMN IN FMESS FOR STORING DISTANCE BETWEEN THE ATOMS IN THE GRAPH.
+# ADD ONE MORE COLUMN IN FMESS FOR STORING DISTANCE BETWEEN THE ATOMS IN THE GRAPH using the XYZ attributes stored already. 
