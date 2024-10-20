@@ -117,6 +117,9 @@ class MolGraphMetal(object):
         # TODO: Molecule recreation: new clean mol object might be necessary here (to ensure
         # fresh atom map numbers), so using self.mol might be wrong. Need to correct outer code accordingly. 
         # mol = get_mol(self.smiles) # modified this to remove smiles input dependency completely
+        """
+        Using Chem.RWMol(self.mol) instead of self.mol to create a fresh mol object for further processing as done by the authors in their original code with smiles strings. Since we have removed smiles dependency, we need to create a fresh mol object using Chem.RWMol() for further processing.
+        """
         mol = Chem.RWMol(self.mol) #added
         for a in mol.GetAtoms():
             a.SetAtomMapNum( a.GetIdx() + 1 )
@@ -135,29 +138,19 @@ class MolGraphMetal(object):
             tree.nodes[i]['cluster'] = cls 
             tree.nodes[i]['assm_cands'] = []
 
-            mol=self.mol
-            # if pa[i] >= 0 and len(self.clusters[ pa[i] ]) > 2: #uncertainty occurs in assembly
-            #     hist = [a for c in prev_sib[i] for a in self.clusters[c]] 
-            #     pa_cls = self.clusters[pa[i]]
-            #     cands = get_assm_cands(mol, hist, inter_label, pa_cls, len(inter_atoms)) 
-                
-            #     #errorhandling
-            #     #-------------------------------------
-            #     if cands is not None:
-            #         tree.nodes[i]['assm_cands']=cands
-            #     else:
-            #         continue
-                    
-            #     #--------------------------------------
+            if pa[i] >= 0 and len(self.clusters[ pa[i] ]) > 2: #uncertainty occurs in assembly
+                hist = [a for c in prev_sib[i] for a in self.clusters[c]] 
+                pa_cls = self.clusters[ pa[i] ]
+                tree.nodes[i]['assm_cands'] = get_assm_cands(mol, hist, inter_label, pa_cls, len(inter_atoms)) 
 
-            #     child_order = tree[i][pa[i]]['label']
-            #     diff = set(cls) - set(pa_cls)
-            #     for fa_atom in inter_atoms:
-            #         for ch_atom in self.mol_graph[fa_atom]:
-            #             if ch_atom in diff:
-            #                 label = self.mol_graph[ch_atom][fa_atom]['label']
-            #                 if type(label) is int: #in case one bond is assigned multiple times
-            #                     self.mol_graph[ch_atom][fa_atom]['label'] = (label, child_order)
+                child_order = tree[i][pa[i]]['label']
+                diff = set(cls) - set(pa_cls)
+                for fa_atom in inter_atoms:
+                    for ch_atom in self.mol_graph[fa_atom]:
+                        if ch_atom in diff:
+                            label = self.mol_graph[ch_atom][fa_atom]['label']
+                            if type(label) is int: #in case one bond is assigned multiple times
+                                self.mol_graph[ch_atom][fa_atom]['label'] = (label, child_order)
         return order
     
     """
@@ -257,10 +250,13 @@ class MolGraphMetal(object):
                     fnode[v] = vocab[attr]
                     agraph.append([])
 
+                """
+                Storing the new bonds information between the new iron node and the ligands in the graph. At the atom level, it will be just the bond type. To take care of this, we are defining a new bond type for the iron-ligand bonds denoted by index 4. Previously other 4 bond types were defined as 0, 1, 2, 3 for single, double, triple, and aromatic bonds respectively.
+                """
                 if use_highlights:
                     for v, attr in G.nodes(data='highlight'):
                         if attr == 1:  # Check if the node is highlighted
-                            fmess.append((iron_index, v, 0, 0))  # Default bond type
+                            fmess.append((iron_index, v, 4, 0))
                             edge_dict[(iron_index, v)] = eid = len(edge_dict) + 1
                             agraph[v].append(eid)
                             bgraph.append([])
