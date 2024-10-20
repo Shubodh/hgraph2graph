@@ -8,4 +8,5 @@ from hgraph.dataset import MoleculeDataset, MolPairDataset, DataFolder, MolEnumR
 # New imports for metal
 from hgraph.vocab_metal import VocabMetal, PairVocabMetal, common_atom_vocab_metal
 from hgraph.mol_graph_metal import MolGraphMetal
-from hgraph.hgnn import HierVAEMetal
+from hgraph.hgnn_metal import HierVAEMetal
+from hgraph.encoder_metal import HierMPNEncoderMetal
