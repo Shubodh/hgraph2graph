@@ -256,18 +256,21 @@ class MolGraphMetal(object):
                 if use_highlights:
                     for v, attr in G.nodes(data='highlight'):
                         if attr == 1:  # Check if the node is highlighted
-                            fmess.append((iron_index, v, 4, 0))
+                            fmess.append((iron_index, v, 4, 0)) # New bond type index 4 for iron-ligand bonds
                             edge_dict[(iron_index, v)] = eid = len(edge_dict) + 1
                             agraph[v].append(eid)
                             bgraph.append([])
                 else:
                     for v, attr in G.nodes(data='label'):
-                        if ':2' in attr[1]:  # Check if the label contains ':2'
-                            fmess.append((iron_index, v, 0, 0))  # Default bond type
+                        if ':2' in attr[1]:  # Check if the ismiles label contains ':2'
+                            fmess.append((iron_index, v, -1, -1))  # Initialize it with -1 for now because we will need sorted order for this later on.
                             edge_dict[(iron_index, v)] = eid = len(edge_dict) + 1
                             agraph[v].append(eid)
                             bgraph.append([])
 
+                """
+                For attributes of edges at the ATOM level, the type can be a tuple because some modification is being done in the assm_cands part of the code in label_tree function for the self.mol_graph object. As of now, i have only encountered the tuple type at the atom level and not at the motif level. For the motif level, the edge attribute is a positional encoding as stored during the dfs traversal of the tree.
+                """
                 for u, v, attr in G.edges(data='label'):
                     if type(attr) is tuple:
                         fmess.append((u, v, attr[0], attr[1]))
@@ -284,6 +287,19 @@ class MolGraphMetal(object):
                         if w == v:
                             continue
                         bgraph[eid].append(edge_dict[(w, u)])
+            
+            """
+            Adding the bond information between the iron node and the ligands in the graph at the motif level. We sort the nodes which are attached to the iron node and then assign the index as the positional encoding at the tree level for each motif. 
+            """
+            neg_nodes = [fm[1] for fm in fmess if fm[2] == -1 and fm[3] == -1]
+            sorted_neg_nodes = sorted(neg_nodes)
+            neg_node_map = {node: idx+1 for idx, node in enumerate(sorted_neg_nodes)}
+            for i, fm in enumerate(fmess):
+                if fm[2] == -1 and fm[3] == -1:
+                    updated_fmess = (fm[0], fm[1], neg_node_map[fm[1]], 0)
+                    fmess[i] = updated_fmess
+
+            neg_nodes = [fm[1] for fm in fmess if fm[2] == -1 and fm[3] == -1]
 
         fnode[0] = fnode[1]  # Set the first node to the iron node
         fnode = torch.IntTensor(fnode)
