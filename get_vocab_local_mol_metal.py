@@ -22,22 +22,34 @@ from mol_graph_metal import MolGraphMetal
 
 error_molecule_ligands={}
 
+# def process(molname,mols,highlights_ligand_mol):
+#     vocab=set()
+#     if molname not in error_molecule_ligands:
+#         error_molecule_ligands[molname] = []
+
+#     for i,mol in enumerate(mols):
+#         highlight_atoms=highlights_ligand_mol[i+1]
+#         hmol=MolGraphMetal(mol,highlight_atoms)
+#         #errorhandling
+#         if hmol.order is None:
+#             print(f"Mol name {mol} is giving error with ligand{i+1} so skipping this ligand\n")
+#             error_molecule_ligands[molname].append(i+1)
+#             continue
+#         for node,attr in hmol.mol_tree.nodes(data=True):
+#             if 'smiles' not in attr:
+#                 continue
+#             smiles=attr['smiles']
+#             vocab.add(attr['label'])
+#             for i,s in attr['inter_label']:
+#                 vocab.add((smiles,s))
+#     return vocab
+
 def process(molname,mols,highlights_ligand_mol):
     vocab=set()
-    if molname not in error_molecule_ligands:
-        error_molecule_ligands[molname] = []
-
     for i,mol in enumerate(mols):
         highlight_atoms=highlights_ligand_mol[i+1]
         hmol=MolGraphMetal(mol,highlight_atoms)
-        #errorhandling
-        if hmol.order is None:
-            print(f"Mol name {mol} is giving error with ligand{i+1} so skipping this ligand\n")
-            error_molecule_ligands[molname].append(i+1)
-            continue
         for node,attr in hmol.mol_tree.nodes(data=True):
-            if 'smiles' not in attr:
-                continue
             smiles=attr['smiles']
             vocab.add(attr['label'])
             for i,s in attr['inter_label']:
@@ -64,6 +76,7 @@ def get_ligand_mols(folder_path):
     charge_array=[0,-1,-2,-3]
 
     for i,f in enumerate(os.listdir(data_folder)):
+        print(f"Processing file {i+1}/{len(os.listdir(data_folder))}")
         file_path = os.path.join(data_folder, f)
         # print(f)
         rawmol=Chem.MolFromXYZFile(file_path)
@@ -174,13 +187,10 @@ def get_ligand_mols(folder_path):
 # add the charge condition above. (-2,-3 or 0) - to consider only those molecules whose total charge of ligands is either -3,-2 or 0. -1 wont work. The small_14 dataset does not have any molecule with charge -1 so proceeding without making that change for now.
 
 if __name__=="__main__":
-    # vocab_folder="data/good_full_small_vocab"
-    # vocab_file="good_full_small_vocab_500.txt"
-    # folderpath="data/good_full_small_500"
 
-    vocab_folder="data/good_full_small_vocab"
-    vocab_file="small_3.txt"
-    folderpath="data/metal_small"
+    vocab_folder="data/small_3/"
+    vocab_file="vocab_3.txt"
+    folderpath="data/small_3/molecules/"
     print("Processing for folder: ", folderpath)
     
     molecule_names,mol_ligands_obj_map,mol_ligands_highlights_indexmap = get_ligand_mols(folderpath)
