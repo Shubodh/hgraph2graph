@@ -251,19 +251,19 @@ class HierMPNDecoderMetal(nn.Module):
 
             subgraph = self.update_graph_mask(graph_batch, new_atoms, hgraph)
 
-        topo_vecs, batch_idx, topo_labels = zip_tensors(all_topo_preds)
+        topo_vecs, batch_idx, topo_labels = zip_tensors_metal(all_topo_preds)
         topo_scores = self.get_topo_score(src_tree_vecs, batch_idx, topo_vecs)
         topo_loss = self.topo_loss(topo_scores, topo_labels.float())
         topo_acc = get_accuracy_bin(topo_scores, topo_labels)
 
-        cls_vecs, batch_idx, cls_labs, icls_labs = zip_tensors(all_cls_preds)
+        cls_vecs, batch_idx, cls_labs, icls_labs = zip_tensors_metal(all_cls_preds)
         cls_scores, icls_scores = self.get_cls_score(src_tree_vecs, batch_idx, cls_vecs, cls_labs)
         cls_loss = self.cls_loss(cls_scores, cls_labs) + self.icls_loss(icls_scores, icls_labs)
         cls_acc = get_accuracy(cls_scores, cls_labs)
         icls_acc = get_accuracy(icls_scores, icls_labs)
 
         if len(all_assm_preds) > 0:
-            assm_vecs, batch_idx, assm_labels = zip_tensors(all_assm_preds)
+            assm_vecs, batch_idx, assm_labels = zip_tensors_metal(all_assm_preds)
             assm_scores = self.get_assm_score(src_graph_vecs, batch_idx, assm_vecs)
             assm_loss = self.assm_loss(assm_scores, assm_labels)
             assm_acc = get_accuracy_sym(assm_scores, assm_labels)

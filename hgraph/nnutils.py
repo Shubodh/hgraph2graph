@@ -53,6 +53,17 @@ def zip_tensors(tup_list):
             res.append( torch.stack(a, dim=0) )
     return res
 
+def zip_tensors_metal(tup_list):
+    res = []
+    tup_list = zip(*tup_list)
+    for a in tup_list:
+        if type(a[0]) is int: 
+            # res.append( torch.LongTensor(a).cuda() )
+            res.append( torch.LongTensor(a) )
+        else:
+            res.append( torch.stack(a, dim=0) )
+    return res
+
 def index_scatter(sub_data, all_data, index):
     d0, d1 = all_data.size()
     buf = torch.zeros_like(all_data).scatter_(0, index.repeat(d1, 1).t(), sub_data)
