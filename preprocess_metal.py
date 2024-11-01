@@ -195,7 +195,10 @@ if __name__ == "__main__":
         print("small data recieved")
         print(len(small_data))
 
-        with open('data/small_3_tensor/small_data.pkl', 'wb') as file:
+        # with open('data/small_3_tensor/small_data.pkl', 'wb') as file:
+        #     pickle.dump(small_data, file,pickle.HIGHEST_PROTOCOL)
+
+        with open('data/metal_small_tensor/small_13.pkl', 'wb') as file:
             pickle.dump(small_data, file,pickle.HIGHEST_PROTOCOL)
 
 

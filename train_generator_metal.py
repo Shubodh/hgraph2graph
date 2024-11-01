@@ -11,6 +11,10 @@ import numpy as np
 import argparse
 import os
 from tqdm.auto import tqdm
+import warnings
+warnings.filterwarnings("ignore")
+
+
 
 from hgraph import *
 
@@ -85,12 +89,18 @@ grad_norm = lambda m: math.sqrt(sum([p.grad.norm().item() ** 2 for p in m.parame
 
 print("initialized model and ready for epochs.")
 
+
 batch = pickle.load(open("data/small_3_tensor/small_data.pkl", "rb"))
 meters=np.zeros(6)
-model.zero_grad()
-kl_div, root_vecs = model(*batch, beta=beta)
-print(kl_div)
-print(root_vecs)
+
+for epoch in range(20):
+    model.zero_grad()
+    loss, kl_div, wacc, iacc, tacc, sacc = model(*batch, beta=beta)
+    loss.backward()
+    nn.utils.clip_grad_norm_(model.parameters(), args.clip_norm)
+    optimizer.step()
+    print(f"Loss: {loss:.4f} | KL Div: {kl_div:.4f} | Wacc: {wacc:.4f} | Iacc: {iacc:.4f} | Tacc: {tacc:.4f} | Sacc: {sacc:.4f}")
+
 
 # for epoch in range(args.epoch):
 #     dataset=DataFolder(args.train,args.batch_size)

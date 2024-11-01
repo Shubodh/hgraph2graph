@@ -7,7 +7,7 @@ def extract_first_n_lines(input_file, output_file, n):
 
 # Usage
 input_file = 'data/chembl/all.txt'  # Replace with your input file name
-output_file = 'data/chembl/all_small.txt'  # Replace with your desired output file name
-n = 150000  # Change this to the number of lines you want to extract
+output_file = 'data/chembl/all_vsmall.txt'  # Replace with your desired output file name
+n = 20000  # Change this to the number of lines you want to extract
 
 extract_first_n_lines(input_file, output_file, n)

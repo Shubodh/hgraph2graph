@@ -10,3 +10,4 @@ from hgraph.vocab_metal import VocabMetal, PairVocabMetal, common_atom_vocab_met
 from hgraph.mol_graph_metal import MolGraphMetal
 from hgraph.hgnn_metal import HierVAEMetal
 from hgraph.encoder_metal import HierMPNEncoderMetal
+from hgraph.decoder_metal import HierMPNDecoderMetal
