@@ -12,8 +12,8 @@ from rdkit.Chem import Descriptors
 from rdkit.Chem import rdMolDescriptors
 from rdkit.Chem import rdDetermineBonds
 import sys
-import py3Dmol
-import base64
+# import py3Dmol
+# import base64
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 class_dir = os.path.join(current_dir, 'hgraph')
@@ -49,7 +49,13 @@ def process(molname,mols,highlights_ligand_mol):
     for i,mol in enumerate(mols):
         highlight_atoms=highlights_ligand_mol[i+1]
         hmol=MolGraphMetal(mol,highlight_atoms)
+        # if hmol.order is None:
+        #     print(f"Mol name {mol} is giving dfs error with ligand{i+1} so skipping this ligand\n")
+        #     continue
         for node,attr in hmol.mol_tree.nodes(data=True):
+            # if 'smiles' not in attr:
+            #     print(f"Smiles not in attr for node {node} in mol {molname} ligand {i+1}")
+            #     continue
             smiles=attr['smiles']
             vocab.add(attr['label'])
             for i,s in attr['inter_label']:
@@ -88,7 +94,9 @@ def get_ligand_mols(folder_path):
         for atom in donor_atoms:
             highlight_atoms.append(atom.GetIdx())
         
-        # function to extract ligands from the molecule by removing the metal centre.
+        """
+        function to extract ligands from the molecule by removing the metal centre.
+        """
         def get_ligand(mol, donor_atom, visited):
             """
             Identify the attached ligands in the metal chelate molecule.
@@ -121,19 +129,25 @@ def get_ligand_mols(folder_path):
 
         atom_map={}
 
-        # function to extract the atoms from the ligands and store them in a dictionary eg - 1-> atoms of ligand 1, 2-> atoms of ligand 2 and so on.
+        """
+        function to extract the atoms from the ligands and store them in a dictionary eg - 1-> atoms of ligand 1, 2-> atoms of ligand 2 and so on.
+        """
         for i,ligand in enumerate(ligands):
             ligand_atoms={atom.GetIdx() : atom.GetSymbol() for atom in ligand}
             atom_map[i+1]=ligand_atoms
         
         mol_name=f.split('.')[0].strip()
-        # ligands_map is a dictionary where the key is the molecule  and the value is the atom_map dictionary of ligands.
+        """
+        ligands_map is a dictionary where the key is the molecule  and the value is the atom_map dictionary of ligands.
+        """
         ligands_map[mol_name] = atom_map
 
         ligand_molblock=[]
         
         index_map={}
-        # for each ligand in the ligands_map dictionary, we create a molblock for the ligand and store the old indices of the atoms in the index_map dictionary
+        """
+        for each ligand in the ligands_map dictionary, we create a molblock for the ligand and store the old indices of the atoms in the index_map dictionary
+        """
         for ligand_number, atom_dict in ligands_map[mol_name].items():
             atom_indices = list(atom_dict.keys())
             index_map[ligand_number]=atom_indices
@@ -146,9 +160,12 @@ def get_ligand_mols(folder_path):
                     data+=f"{atom_symbol} {x} {y} {z}\n"
             ligand_molblock.append(data)
 
-        # creating a new map of highlight atoms for the new ligands. each ligand entry will correspond to the atoms in the ligand that are to be highlighted.
+        """
+        creating a new map of highlight atoms for the new ligands. each ligand entry will correspond to the atoms in the ligand that are to be highlighted.
+        """
         highlight_atoms_new={}
         lmol_array=[]
+        total_charge=0
 
         # Now we have each individual ligand molblock and the corresponding indexes of the atoms is in index_map
         for i,ligandblock in enumerate(ligand_molblock):
@@ -164,6 +181,10 @@ def get_ligand_mols(folder_path):
                 except:
                     continue
                     # print(f"charge {ch} does not work")
+            """
+            Calculating the total charge of the molecule. If the total charge is -3,-2 or 0 then we proceed with this molecule else we skip it.
+            """
+            total_charge+=ch
             lmol.UpdatePropertyCache(strict=False)
             ligand_smiles = Chem.MolToSmiles(lmol)
 
@@ -179,6 +200,11 @@ def get_ligand_mols(folder_path):
             highlight_atoms_new[i+1]=ligand_highlightatoms
             lmol_array.append(lmol)
 
+        if total_charge in [-3,-2,0]:
+            print(f"Total charge of ligands is {total_charge} so proceeding with this molecule")
+        else:
+            print(f"Total charge of ligands is {total_charge} so skipping this molecule")
+            continue
         mol_ligands_obj_map[mol_name]=lmol_array
         mol_ligands_highlights_indexmap[mol_name]=highlight_atoms_new
         molecule_names.append(mol_name)
@@ -188,12 +214,16 @@ def get_ligand_mols(folder_path):
 
 if __name__=="__main__":
 
-    vocab_folder="data/small_3/"
-    vocab_file="vocab_3.txt"
-    folderpath="data/small_3/molecules/"
+    vocab_folder="data/2000/"
+    # vocab_folder="data/small_3/"
+    vocab_file="vocab_2k.txt"
+    # vocab_file="vocab_3.txt"
+    folderpath="data/good_full_small_2000/"
+    # folderpath="data/small_3/molecules/"
     print("Processing for folder: ", folderpath)
     
     molecule_names,mol_ligands_obj_map,mol_ligands_highlights_indexmap = get_ligand_mols(folderpath)
+    print(len(molecule_names))
 
 
 

@@ -1,4 +1,5 @@
 # python3 preprocess_metal.py --train_folder data/small_3/molecules/ --vocab data/small_3/small_3.txt 
+# python3 preprocess_metal.py --train_folder data/metal_small/ --vocab data/metal_small_vocab/vocab_13.txt 
 
 from multiprocessing import Pool
 import math, random, sys
@@ -28,8 +29,8 @@ def to_numpy(tensors):
 
 # DO NOT iterate over complexes names when the total data size is lesser than the pool that ur using because then it will iterate over the characters instead of the molecules in total. 
 
-def tensorize_metal(complexes_names,complexes_ligands, complexes_highlights,vocab):
-    x = MolGraphMetal.tensorize_metal(complexes_names, complexes_ligands, complexes_highlights, vocab, common_atom_vocab_metal)
+def tensorize_metal(complexes_names,complexes_ligands, complexes_highlights, complexes_ligandblock, complexes_iron_coord, vocab):
+    x = MolGraphMetal.tensorize_metal(complexes_names, complexes_ligands, complexes_highlights, complexes_ligandblock, complexes_iron_coord, vocab, common_atom_vocab_metal)
     return to_numpy(x)
 
 def tensorize_pair(mol_batch, vocab):
@@ -62,6 +63,8 @@ def get_ligand_mols(folder_path):
     
     ligands_map={}
     mol_ligands_obj_map={}
+    mol_ligandblock_map={} # modification for distance calculation
+    mol_iron_coord={}
     mol_ligands_highlights_indexmap={}
     molecule_names=[]
     charge_array=[0,-1,-2,-3]
@@ -108,6 +111,16 @@ def get_ligand_mols(folder_path):
         ligand_molblock=[]
         index_map={}
 
+        """
+        For each molecule, storing the coordinates of the iron atom seperately.
+        """
+        metaldata=read_molecule_file(os.path.join(data_folder,mol_name+'.xyz'))
+        for data in metaldata:
+            atom_symbol, x, y, z = data
+            if(atom_symbol=='Fe'):
+                x, y, z = float(x), float(y), float(z)
+                mol_iron_coord[mol_name]=(x,y,z)
+
         for ligand_number,atom_dict in ligands_map[mol_name].items():
             atom_indices = list(atom_dict.keys())
             index_map[ligand_number]=atom_indices
@@ -123,6 +136,8 @@ def get_ligand_mols(folder_path):
 
         highlight_atoms_new={}
         lmol_array=[]
+        mol_ligandblock_map[mol_name]=ligand_molblock # modification for distance calculation
+        total_charge=0
 
         for i,ligandblock in enumerate(ligand_molblock):
             ligand_smiles=""
@@ -134,11 +149,15 @@ def get_ligand_mols(folder_path):
                     break
                 except:
                     continue
+            total_charge+=ch
             lmol.UpdatePropertyCache(strict=False)
             ligand_smiles=Chem.MolToSmiles(lmol)
 
             ligand_highlightatoms=[]
 
+            """
+            If the indices of this ligand in the original molecule are in the highlight_atoms list, then add them to the ligand_highlight_atoms list
+            """
             for j,atom in enumerate(lmol.GetAtoms()):
                 if(index_map[i+1][j] in highlight_atoms):
                     ligand_highlightatoms.append(j)
@@ -146,11 +165,13 @@ def get_ligand_mols(folder_path):
             highlight_atoms_new[i+1]=ligand_highlightatoms
             lmol_array.append(lmol)
         
+        if total_charge not in [-3,-2,0]:
+            continue
         mol_ligands_obj_map[mol_name]=lmol_array
         mol_ligands_highlights_indexmap[mol_name]=highlight_atoms_new
         molecule_names.append(mol_name)
     
-    return molecule_names,mol_ligands_obj_map, mol_ligands_highlights_indexmap
+    return molecule_names,mol_ligands_obj_map, mol_ligands_highlights_indexmap,mol_ligandblock_map, mol_iron_coord # modification for distance calculation
 
 if __name__ == "__main__":
     lg = rdkit.RDLogger.logger() 
@@ -159,7 +180,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--train_folder', required=True)
     parser.add_argument('--vocab', required=True)
-    parser.add_argument('--batch_size', type=int, default=4) # changed from 32 to 4 
+    parser.add_argument('--batch_size', type=int, default=16) # changed from 32 to 16
     parser.add_argument('--mode', type=str, default='single') # changed from 'pair' to 'single'
     parser.add_argument('--ncpu', type=int, default=8)
     args = parser.parse_args()
@@ -175,7 +196,7 @@ if __name__ == "__main__":
         print("Single mode")
         #dataset contains single molecules
 
-        complexes_names,complexes_ligands,complexes_highlights = get_ligand_mols(args.train_folder)
+        complexes_names,complexes_ligands,complexes_highlights,complexes_ligandblock, complexes_iron_coord = get_ligand_mols(args.train_folder) # modification for distance calculation
         print("Molecule names: ", complexes_names)
         
 
@@ -190,10 +211,33 @@ if __name__ == "__main__":
         # --------- USE THIS FOR POOLING THE DATA WITH MULTIPLE PROCESSES LATER----------------
         # func = partial(tensorize_metal, vocab = args.vocab, complexes_ligands=complexes_ligands)
         # all_data = pool.map(func, complexes_names)
+        # --------------------------------------------------------------------------------------------
+        # print(len(complexes_names))
+        # batches=[complexes_names[i:i+args.batch_size] for i in range(0, len(complexes_names), args.batch_size)]
+        # print(len(batches))
 
-        small_data = tensorize_metal(complexes_names=complexes_names,complexes_ligands=complexes_ligands, complexes_highlights=complexes_highlights,vocab=args.vocab)
+        # func = partial(tensorize_metal, vocab = args.vocab, complexes_ligands=complexes_ligands, complexes_highlights=complexes_highlights, complexes_ligandblock=complexes_ligandblock, complexes_iron_coord=complexes_iron_coord)
+        # all_data = pool.map(func, batches)
+        # print(len(all_data))
+
+        # num_splits = len(all_data) // 20 
+        # le = (len(all_data) + num_splits - 1) // num_splits
+
+        # print("Number of splits: ", num_splits)
+        # print("Length of each split: ", le)
+
+        # for split_id in range(num_splits):
+        #     st = split_id * le
+        #     sub_data = all_data[st : st + le]
+
+        #     with open('tensors-%d.pkl' % split_id, 'wb') as f:
+        #         pickle.dump(sub_data, f, pickle.HIGHEST_PROTOCOL)
+        #     print("Dumped split ", split_id)
+        
+        small_data = tensorize_metal(complexes_names=complexes_names,complexes_ligands=complexes_ligands, complexes_highlights=complexes_highlights, complexes_ligandblock=complexes_ligandblock,complexes_iron_coord=complexes_iron_coord,vocab=args.vocab)
         print("small data recieved")
         print(len(small_data))
+        print(small_data[1][1][1].shape)
 
         # with open('data/small_3_tensor/small_data.pkl', 'wb') as file:
         #     pickle.dump(small_data, file,pickle.HIGHEST_PROTOCOL)

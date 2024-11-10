@@ -56,7 +56,7 @@ class HierVAEMetal(nn.Module):
 
         root_vecs, root_kl = self.rsample(root_vecs, self.R_mean, self.R_var, perturb_z)
         kl_div = root_kl
-        print('kl_div Inside:',kl_div)
+        # print('kl_div Inside:',kl_div)
 
         loss,wacc,iacc,tacc,sacc = self.decoder((root_vecs, root_vecs, root_vecs), graphs, tensors, orders)
         return loss + beta * kl_div, kl_div.item(), wacc, iacc, tacc, sacc
