@@ -22,9 +22,9 @@ class HierVAE(nn.Module):
         super(HierVAE, self).__init__()
         self.encoder = HierMPNEncoder(args.vocab, args.atom_vocab, args.rnn_type, args.embed_size, args.hidden_size, args.depthT, args.depthG, args.dropout)
         self.decoder = HierMPNDecoder(args.vocab, args.atom_vocab, args.rnn_type, args.embed_size, args.hidden_size, args.latent_size, args.diterT, args.diterG, args.dropout)
-        self.encoder.tie_embedding(self.decoder.hmpn)
+        self.encoder.tie_embedding(self.decoder.hmpn) # sharing the weights between the encoder and decoder. 
         self.latent_size = args.latent_size
-
+        
         self.R_mean = nn.Linear(args.hidden_size, args.latent_size)
         self.R_var = nn.Linear(args.hidden_size, args.latent_size)
 
@@ -53,9 +53,11 @@ class HierVAE(nn.Module):
         tree_tensors, graph_tensors = tensors = make_cuda(tensors)
 
         root_vecs, tree_vecs, _, graph_vecs = self.encoder(tree_tensors, graph_tensors)
-        root_vecs, root_kl = self.rsample(root_vecs, self.R_mean, self.R_var, perturb_z)
+        root_vecs, root_kl = self.rsample(root_vecs, self.R_mean, self.R_var, perturb_z) # reparametrization trick
         kl_div = root_kl
 
+        """
+        The decoder has taken in the root_vecs thrice but i think it should take root_vecs, tree_vecs, graph_vecs and the graphs, tensors, orders."""
         loss, wacc, iacc, tacc, sacc = self.decoder((root_vecs, root_vecs, root_vecs), graphs, tensors, orders)
         return loss + beta * kl_div, kl_div.item(), wacc, iacc, tacc, sacc
 
