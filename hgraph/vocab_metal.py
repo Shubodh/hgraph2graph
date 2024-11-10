@@ -37,7 +37,9 @@ class PairVocabMetal(object):
             idx = self.vmap[(h,s)]
             self.mask[hid, idx] = 1000.0
 
-        if cuda: self.mask = self.mask.cuda()
+        if cuda: 
+            print("Using cuda")
+            self.mask = self.mask.cuda()
         self.mask = self.mask - 1000.0
             
     def __getitem__(self, x):
@@ -76,6 +78,24 @@ class PairVocabMetal(object):
         return self.inter_size[icls_idx]
 
 COMMON_ATOMS = [('B', 0), ('B', -1), ('Br', 0), ('Br', -1), ('Br', 2), ('C', 0), ('C', 1), ('C', -1), ('Cl', 0), ('Cl', 1), ('Cl', -1), ('Cl', 2), ('Cl', 3), ('F', 0), ('F', 1), ('F', -1), ('I', -1), ('I', 0), ('I', 1), ('I', 2), ('I', 3), ('N', 0), ('N', 1), ('N', -1), ('O', 0), ('O', 1), ('O', -1), ('P', 0), ('P', 1), ('P', -1), ('S', 0), ('S', 1), ('S', -1), ('Se', 0), ('Se', 1), ('Se', -1), ('Si', 0), ('Si', -1), ('H',0), ('Fe',0)]
+# COMMON_ATOMS = [ ('B', -3), ('B', -2), ('B', -1), ('B', 0), ('B', 1), ('B', 2), ('B', 3),
+#                 ('Br', -3), ('Br', -2), ('Br', -1), ('Br', 0), ('Br', 1), ('Br', 2),
+#                 ('C', -3), ('C', -2), ('C', -1), ('C', 0), ('C', 1), ('C', 2), ('C', 3),
+#                 ('Cl', -3), ('Cl', -2), ('Cl', -1), ('Cl', 0), ('Cl', 1), ('Cl', 2), ('Cl', 3),
+#                 ('F', -3), ('F', -2), ('F', -1), ('F', 0), ('F', 1), ('F', 2),
+#                 ('I', -3), ('I', -2), ('I', -1), ('I', 0), ('I', 1), ('I', 2), ('I', 3),
+#                 ('N', -3), ('N', -2), ('N', -1), ('N', 0), ('N', 1), ('N', 2), ('N', 3),
+#                 ('O', -3), ('O', -2), ('O', -1), ('O', 0), ('O', 1), ('O', 2),
+#                 ('P', -3), ('P', -2), ('P', -1), ('P', 0), ('P', 1), ('P', 2), ('P', 3),
+#                 ('S', -3), ('S', -2), ('S', -1), ('S', 0), ('S', 1), ('S', 2), ('S', 3),
+#                 ('Se', -3), ('Se', -2), ('Se', -1), ('Se', 0), ('Se', 1), ('Se', 2),
+#                 ('Si', -3), ('Si', -2), ('Si', -1), ('Si', 0), ('Si', 1), ('Si', 2),
+#                 ('H', 0),
+#                 ('Fe', 0),
+#                 ('Al', -3), ('Al', -2), ('Al', -1), ('Al', 0), ('Al', 1), ('Al', 2), ('Al', 3),
+#                 ('Li', 0), ('Li', 1), ('Li', 2), ('Li', 3),( 'Li', -1), ('Li', -2), ('Li', -3),
+#                 ('Na',0), ('Na', 1), ('Na', 2), ('Na', 3), ('Na', -1), ('Na', -2), ('Na', -3),
+# ]
 """
 Added Iron with the formal charge zero. Can also add more formal charged if we are uniquely identifying different complexes with different formal charges of the iron atom.
 """
