@@ -214,12 +214,12 @@ def get_ligand_mols(folder_path):
 
 if __name__=="__main__":
 
-    vocab_folder="data/2000/"
-    # vocab_folder="data/small_3/"
-    vocab_file="vocab_2k.txt"
-    # vocab_file="vocab_3.txt"
-    folderpath="data/good_full_small_2000/"
-    # folderpath="data/small_3/molecules/"
+    # vocab_folder="data/2000/"
+    vocab_folder="data/small_3/"
+    # vocab_file="vocab_2k.txt"
+    vocab_file="vocab_3_dist.txt"
+    # folderpath="data/good_full_small_2000/"
+    folderpath="data/small_3/molecules/"
     print("Processing for folder: ", folderpath)
     
     molecule_names,mol_ligands_obj_map,mol_ligands_highlights_indexmap = get_ligand_mols(folderpath)

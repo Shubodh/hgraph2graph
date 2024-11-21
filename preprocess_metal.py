@@ -30,7 +30,8 @@ def to_numpy(tensors):
 # DO NOT iterate over complexes names when the total data size is lesser than the pool that ur using because then it will iterate over the characters instead of the molecules in total. 
 
 def tensorize_metal(complexes_names,complexes_ligands, complexes_highlights, complexes_ligandblock, complexes_iron_coord, vocab):
-    x = MolGraphMetal.tensorize_metal(complexes_names, complexes_ligands, complexes_highlights, complexes_ligandblock, complexes_iron_coord, vocab, common_atom_vocab_metal)
+    # x = MolGraphMetal.tensorize_metal(complexes_names, complexes_ligands, complexes_highlights, complexes_ligandblock, complexes_iron_coord, vocab, common_atom_vocab_metal)
+    x = MolGraphMetal.tensorize_metal_dist(complexes_names, complexes_ligands, complexes_highlights, complexes_ligandblock, complexes_iron_coord, vocab, common_atom_vocab_metal)
     return to_numpy(x)
 
 def tensorize_pair(mol_batch, vocab):
@@ -238,12 +239,13 @@ if __name__ == "__main__":
         print("small data recieved")
         print(len(small_data))
         print(small_data[1][1][1].shape)
+        print(small_data[1][1][1].dtype)
 
-        # with open('data/small_3_tensor/small_data.pkl', 'wb') as file:
-        #     pickle.dump(small_data, file,pickle.HIGHEST_PROTOCOL)
-
-        with open('data/metal_small_tensor/small_13.pkl', 'wb') as file:
+        with open('data/small_3_tensor/small_3_dist.pkl', 'wb') as file:
             pickle.dump(small_data, file,pickle.HIGHEST_PROTOCOL)
+
+        # with open('data/metal_small_tensor/small_13.pkl', 'wb') as file:
+        #     pickle.dump(small_data, file,pickle.HIGHEST_PROTOCOL)
 
 
 # +3, +2, +1, 0 - For FE atoms

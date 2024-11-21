@@ -15,15 +15,17 @@ class MolGraphMetal(object):
     # MAX_POS = 100
     MAX_POS=20
 
-    def __init__(self, mol,highlight_atoms,xyz_block=None):
+    def __init__(self, mol, highlight_atoms, xyz_block=None):
         # self.smiles = smiles
         # self.mol = get_mol(smiles)
 
         """
         Accessing the atom coordinates from the xyz block of the ligand and storing them as tuples.
+        Initializing atom coordinates if the xyz block is provided. If not, then atom coordinates will be None.
         """
         atom_coordinates = []
         if xyz_block is not None:
+            print("XYZ block provided")
             data_lines=xyz_block.strip().split('\n')
             atom_data_lines = data_lines[2:]
             for i, line in enumerate(atom_data_lines):
@@ -31,23 +33,38 @@ class MolGraphMetal(object):
                 _, x, y, z = atom_info
                 x, y, z = float(x), float(y), float(z)
                 atom_coordinates.append((x, y, z))
-        
-        """
-        Initializing atom coordinates if the xyz block is provided. If not, then atom coordinates will be None.
-        """
-        if xyz_block is not None:
+            
             self.atom_coordinates = atom_coordinates
+            self.mol=mol
+            self.highlight=highlight_atoms
+            self.mol_graph=self.build_mol_graph_dist()
+            self.clusters,self.atom_cls,self.clusters_xyz=self.find_clusters_dist()
+            self.mol_tree, self.tree_motif_cords=self.tree_decomp_dist()
+            self.order=self.label_tree_dist()
+        
         else:
-            self.atom_coordinates = None
+            print("No xyz block provided")
+            self.atom_coordinates=None
+            self.mol=mol
+            self.highlight=highlight_atoms
+            self.mol_graph = self.build_mol_graph()
+            self.clusters, self.atom_cls = self.find_clusters()
+            self.mol_tree = self.tree_decomp()
+            self.order = self.label_tree()
 
-        self.mol = mol
-        self.highlight=highlight_atoms
-        self.mol_graph = self.build_mol_graph()
-        # self.clusters, self.atom_cls, self.clusters_xyz = self.find_clusters()
-        # self.mol_tree, self.tree_motif_cords = self.tree_decomp_dist()
-        self.clusters, self.atom_cls = self.find_clusters()
-        self.mol_tree = self.tree_decomp()
-        self.order = self.label_tree()
+        # if xyz_block is not None:
+        #     self.atom_coordinates = atom_coordinates
+        # else:
+        #     self.atom_coordinates = None
+
+        # self.mol = mol
+        # self.highlight=highlight_atoms
+        # self.mol_graph = self.build_mol_graph()
+        # # self.clusters, self.atom_cls, self.clusters_xyz = self.find_clusters()
+        # # self.mol_tree, self.tree_motif_cords = self.tree_decomp_dist()
+        # self.clusters, self.atom_cls = self.find_clusters()
+        # self.mol_tree = self.tree_decomp()
+        # self.order = self.label_tree()
 
     def find_clusters(self):
         mol = self.mol
@@ -444,8 +461,8 @@ class MolGraphMetal(object):
             if self.atom_coordinates is not None:
                 coord1 = self.atom_coordinates[a1]
                 coord2 = self.atom_coordinates[a2]
-                print(coord1)
-                print(np.array(coord1))
+                # print(coord1)
+                # print(np.array(coord1))
                 distance = np.linalg.norm(np.array(coord1) - np.array(coord2))
                 graph[a1][a2]['euclidean_distance'] = distance
                 graph[a2][a1]['euclidean_distance'] = distance
@@ -613,11 +630,12 @@ class MolGraphMetal(object):
         return (fnode, fmess, agraph, bgraph, scope), nx.union_all(all_G)
     
     @staticmethod
-    def tensorize_metal_dist(complexes_names_batch, complexes_ligands, complexes_highlights, complexes_ligandblock, complexes_iron_coord, vocab, avocab, distance=False):
+    def tensorize_metal_dist(complexes_names_batch, complexes_ligands, complexes_highlights, complexes_ligandblock, complexes_iron_coord, vocab, avocab):
         mol_batch_metal_map = {}
         mol_tree_metal_map = {}
         mol_graph_metal_map = {}
         mol_ironcoord_map = {}
+        print(complexes_names_batch)
 
         for idx, complex in enumerate(complexes_names_batch):
             ligands_set = complexes_ligands[complex]
@@ -625,21 +643,15 @@ class MolGraphMetal(object):
             ligands_block = complexes_ligandblock[complex]
             iron_coord=complexes_iron_coord[complex] # modification for distance calculation
             mol_ironcoord_map[complex] = iron_coord
-
-            if distance:
-                mol_batch_metal_map[complex] = [MolGraphMetal(ligand,ligands_highlights[i+1],ligands_block[i]) for i,ligand in enumerate(ligands_set)]
-            else:
-                mol_batch_metal_map[complex] = [MolGraphMetal(ligand,ligands_highlights[i+1]) for i,ligand in enumerate(ligands_set)]
-
+        
+            mol_batch_metal_map[complex]=[MolGraphMetal(ligand,ligands_highlights[i+1],ligands_block[i]) for i,ligand in enumerate(ligands_set)]
             mol_tree_metal_map[complex] = [x.mol_tree for x in mol_batch_metal_map[complex]]
             mol_graph_metal_map[complex] = [x.mol_graph for x in mol_batch_metal_map[complex]]
-        
-        if distance:
-            tree_tensors,tree_batchG=MolGraphMetal.tensorize_graph_metal_dist(complexes_names_batch, mol_tree_metal_map, vocab, distance=True, mol_ironcoord_map=mol_ironcoord_map)
-            graph_tensors, graph_batchG = MolGraphMetal.tensorize_graph_metal_dist(complexes_names_batch, mol_graph_metal_map, avocab,('Fe',0), use_highlights=True, distance=True, mol_ironcoord_map=mol_ironcoord_map)
-        else:
-            tree_tensors, tree_batchG = MolGraphMetal.tensorize_graph_metal_dist(complexes_names_batch, mol_tree_metal_map, vocab)
-            graph_tensors, graph_batchG = MolGraphMetal.tensorize_graph_metal_dist(complexes_names_batch, mol_graph_metal_map, avocab,('Fe',0), use_highlights=True)
+
+        print("tree tensors")
+        tree_tensors,tree_batchG=MolGraphMetal.tensorize_graph_metal_dist(complexes_names_batch, mol_tree_metal_map, vocab, mol_ironcoord_map=mol_ironcoord_map)
+        print("graph tensors")
+        graph_tensors, graph_batchG = MolGraphMetal.tensorize_graph_metal_dist(complexes_names_batch, mol_graph_metal_map, avocab, mol_ironcoord_map,('Fe',0), use_highlights=True)
 
         tree_scope = tree_tensors[-1]
         graph_scope = graph_tensors[-1] 
@@ -667,21 +679,17 @@ class MolGraphMetal(object):
         tree_tensors = tree_tensors[:4] + (cgraph, tree_scope)
         return (tree_batchG, graph_batchG), (tree_tensors, graph_tensors), all_orders
     
-    def tensorize_graph_metal_dist(complexes_names_batch, mol_metal_map_batch, vocab, iron_tuple=('Fe', 'Fe:2'), use_highlights=False, distance=False, mol_ironcoord_map=None):
+    def tensorize_graph_metal_dist(complexes_names_batch, mol_metal_map_batch, vocab, mol_ironcoord_map, iron_tuple=('Fe', 'Fe:2'), use_highlights=False):
 
-        if distance:
-            fnode, fmess = [None], [(0, 0, 0, 0, 0)]
-        else:
-            fnode, fmess = [None], [(0, 0, 0, 0)]
+        fnode, fmess = [None], [(0, 0, 0, 0, 0)]
         agraph, bgraph = [[]], [[]]
         scope = []
         edge_dict = {}
         all_G = []
-        bid=0
+        bid = 0
 
         for complex_name in complexes_names_batch:
-            if distance:
-                iron_coord=mol_ironcoord_map[complex_name] # modification for distance calculation
+            iron_coord=mol_ironcoord_map[complex_name] # modification for distance calculation
             graphs = mol_metal_map_batch[complex_name]
 
             iron_index = len(fnode)
@@ -705,67 +713,40 @@ class MolGraphMetal(object):
                 """
                 Storing the new bonds information between the new iron node and the ligands in the graph. At the atom level, it will be just the bond type. To take care of this, we are defining a new bond type for the iron-ligand bonds denoted by index 4. Previously other 4 bond types were defined as 0, 1, 2, 3 for single, double, triple, and aromatic bonds respectively.
                 """
-                if distance:
-                    if use_highlights:
-                        for v, attr in G.nodes(data=True):
-                            if attr.get('highlight') == 1:  # Check if the node is highlighted
-                                coords=attr['coordinates']
-                                dist=np.linalg.norm(np.array(iron_coord)-np.array(coords))
-                                fmess.append((iron_index, v, 4, 0, dist)) # New bond type index 4 for iron-ligand bonds
-                                edge_dict[(iron_index, v)] = eid = len(edge_dict) + 1
-                                agraph[v].append(eid)
-                                bgraph.append([])
-                    else:
-                        for v, attr in G.nodes(data=True):
-                            label_attr=attr['label']
-                            if ':2' in label_attr[1]:  # Check if the ismiles label contains ':2'
-                                coords=attr['coordinates']
-                                dist=np.linalg.norm(np.array(iron_coord)-np.array(coords))
-                                fmess.append((iron_index, v, -1, -1, dist))  # Initialize it with -1 for now because we will need sorted order for this later on.
-                                edge_dict[(iron_index, v)] = eid = len(edge_dict) + 1
-                                agraph[v].append(eid)
-                                bgraph.append([])
+                if use_highlights:
+                    for v, attr in G.nodes(data=True):
+                        if attr.get('highlight') == 1:  # Check if the node is highlighted
+                            coords=attr['coordinates']
+                            dist=np.linalg.norm(np.array(iron_coord)-np.array(coords))
+                            fmess.append((iron_index, v, 4, 0, dist)) # New bond type index 4 for iron-ligand bonds
+                            edge_dict[(iron_index, v)] = eid = len(edge_dict) + 1
+                            agraph[v].append(eid)
+                            bgraph.append([])
                 else:
-                    if use_highlights:
-                        for v, attr in G.nodes(data='highlight'):
-                            if attr == 1:  # Check if the node is highlighted
-                                fmess.append((iron_index, v, 4, 0)) # New bond type index 4 for iron-ligand bonds
-                                edge_dict[(iron_index, v)] = eid = len(edge_dict) + 1
-                                agraph[v].append(eid)
-                                bgraph.append([])
-                    else:
-                        for v, attr in G.nodes(data='label'):
-                            if ':2' in attr[1]:  # Check if the ismiles label contains ':2'
-                                fmess.append((iron_index, v, -1, -1))  # Initialize it with -1 for now because we will need sorted order for this later on.
-                                edge_dict[(iron_index, v)] = eid = len(edge_dict) + 1
-                                agraph[v].append(eid)
-                                bgraph.append([])
+                    for v, attr in G.nodes(data=True):
+                        label_attr=attr['label']
+                        if ':2' in label_attr[1]:  # Check if the ismiles label contains ':2'
+                            coords=attr['coordinates']
+                            dist=np.linalg.norm(np.array(iron_coord)-np.array(coords))
+                            fmess.append((iron_index, v, -1, -1, dist))  # Initialize it with -1 for now because we will need sorted order for this later on.
+                            edge_dict[(iron_index, v)] = eid = len(edge_dict) + 1
+                            agraph[v].append(eid)
+                            bgraph.append([])
 
                 """
                 For attributes of edges at the ATOM level, the type can be a tuple because some modification is being done in the assm_cands part of the code in label_tree function for the self.mol_graph object. As of now, i have only encountered the tuple type at the atom level and not at the motif level. For the motif level, the edge attribute is a positional encoding as stored during the dfs traversal of the tree.
                 """
-                if distance:
-                    for u, v, attr in G.edges(data=True):
-                        label_attr=attr['label']
-                        distance=attr['euclidean_distance']
-                        if type(label_attr) is tuple:
-                            fmess.append((u, v, label_attr[0], label_attr[1], distance))
-                        else:
-                            fmess.append((u, v, label_attr, 0, distance))
-                        edge_dict[(u, v)] = eid = len(edge_dict) + 1
-                        G[u][v]['mess_idx'] = eid
-                        agraph[v].append(eid)
-                        bgraph.append([])
-                else:
-                    for u, v, attr in G.edges(data='label'):
-                        if type(attr) is tuple:
-                            fmess.append((u, v, attr[0], attr[1]))
-                        else:
-                            fmess.append((u, v, attr, 0))
-                        edge_dict[(u, v)] = eid = len(edge_dict) + 1
-                        G[u][v]['mess_idx'] = eid
-                        agraph[v].append(eid)
-                        bgraph.append([])
+                for u, v, attr in G.edges(data=True):
+                    label_attr=attr['label']
+                    distance=attr['euclidean_distance']
+                    if type(label_attr) is tuple:
+                        fmess.append((u, v, label_attr[0], label_attr[1], distance))
+                    else:
+                        fmess.append((u, v, label_attr, 0, distance))
+                    edge_dict[(u, v)] = eid = len(edge_dict) + 1
+                    G[u][v]['mess_idx'] = eid
+                    agraph[v].append(eid)
+                    bgraph.append([])
 
                 for u, v in G.edges:
                     eid = edge_dict[(u, v)]
@@ -789,12 +770,14 @@ class MolGraphMetal(object):
 
         fnode[0] = fnode[1]  # Set the first node to the iron node
         fnode = torch.IntTensor(fnode)
-        fmess=torch.Tensor(fmess)
-        print(fmess[5,0])
-        print(fmess[5,1])
-        print(fmess[5,2])
-        print(fmess[5,3])
-        print(fmess[5,4])
+        fmess=torch.FloatTensor(fmess)
+        print(fmess.shape)
+        print(fmess.dtype)
+        print(fmess[6])
+        # print(fmess[5,1])
+        # print(fmess[5,2])
+        # print(fmess[5,3])
+        # print(fmess[5,4])
         # fmess = torch.IntTensor(fmess)
         # print(fmess[:,0].dtype)
         # print(fmess[:,1].dtype)

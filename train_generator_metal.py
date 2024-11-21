@@ -69,7 +69,8 @@ with open(args.vocab) as f:
     vocab = [x.strip("\r\n ").split() for x in f]
 args.vocab = PairVocabMetal(vocab,cuda=False)
 
-model = HierVAEMetal(args)
+model = HierVAEMetalDist(args)
+# model = HierVAEMetal(args)
 print("Model #Params: %dK" % (sum([x.nelement() for x in model.parameters()]) / 1000,))
 
 for param in model.parameters():
@@ -95,7 +96,8 @@ grad_norm = lambda m: math.sqrt(sum([p.grad.norm().item() ** 2 for p in m.parame
 print("initialized model and ready for epochs.")
 
 
-batch = pickle.load(open("data/small_3_tensor/small_data.pkl", "rb"))
+batch = pickle.load(open("data/small_3_tensor/small_3_dist.pkl", "rb"))
+print(len(batch))
 meters=np.zeros(6)
 
 for epoch in range(20):

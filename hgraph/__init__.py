@@ -11,3 +11,8 @@ from hgraph.mol_graph_metal import MolGraphMetal
 from hgraph.hgnn_metal import HierVAEMetal
 from hgraph.encoder_metal import HierMPNEncoderMetal
 from hgraph.decoder_metal import HierMPNDecoderMetal
+
+# new imports for dist
+from hgraph.hgnn_metal import HierVAEMetalDist
+from hgraph.encoder_metal_dist import HierMPNEncoderMetalDist
+from hgraph.decoder_metal_dist import HierMPNDecoderMetalDist
