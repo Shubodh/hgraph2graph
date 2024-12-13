@@ -148,15 +148,15 @@ class HierMPNEncoderMetalDist(nn.Module):
         fnode, fmess, agraph, bgraph, cgraph, _ = tree_tensors
         # print("Inside embed_inter")
         # print(fnode.size())
+        # print(cgraph.size())
         # print(fmess.size())
-        print("inside embed_inter")
-        print(hatom.size())
-        print(cgraph.size())
+        # print("inside embed_inter")
+        # print(hatom.size())
+        # print(cgraph.size())
 
         fmess_int = fmess[:, :4].int()  # Shape: [n, 4], dtype: int32
         fdist = fmess[:, 4].unsqueeze(1)  # Shape: [n, 1]
         finput = self.E_i(fnode[:, 1])
-
         hnode = index_select_ND(hatom, 0, cgraph).sum(dim=1)
         hnode = self.W_i( torch.cat([finput, hnode], dim=-1) )
 
@@ -207,13 +207,19 @@ class HierMPNEncoderMetalDist(nn.Module):
 
     fpos - extracts the one-hot vectors from E_apos corresponding to the child_order of the edges present in fmess_int
 
-    hmess - concatenates the one-hot vectors of the source atom, destination atom, child_order and the distance between the atoms in the edge.
+    hmess - concatenates the one-hot vectors of the source atom, bond type, child_order and the distance between the atoms in the edge.
+    """
+
+    """
+    IDEAS GIVEN DURING MEET BY PRANAV AND BISWAJIT SIR
+    ### using fdist as a bin maybe. 
+    ### combining one hot with fdist may not be semantically well. can put mlp after concatenating. will make it compatible. popular in papers. 
     """
     def embed_graph(self, graph_tensors):
         fnode, fmess, agraph, bgraph, _ = graph_tensors
-        print("inside embed_graph")
-        print(fnode.size())
-        print(fnode)
+        # print("inside embed_graph")
+        # print(fnode.size())
+        # print(fnode)
         # print(fnode.size())
         # print("datatype of fmess")
         # print(fmess.dtype)
@@ -231,11 +237,11 @@ class HierMPNEncoderMetalDist(nn.Module):
         fmess2 = self.E_b.index_select(index=fmess_int[:, 2], dim=0)
         fpos = self.E_apos.index_select(index=fmess_int[:, 3], dim=0)
         hmess = torch.cat([fmess1, fmess2, fpos, fdist], dim=-1) # Modified to include fdist
-        print(fmess1.shape)
-        print(fmess2.shape)
-        print(fpos.shape)
-        print("hmess")
-        print(hmess.size())
+        # print(fmess1.shape)
+        # print(fmess2.shape)
+        # print(fpos.shape)
+        # print("hmess")
+        # print(hmess.size())
         return hnode, hmess, agraph, bgraph
 
     """
@@ -252,7 +258,10 @@ class HierMPNEncoderMetalDist(nn.Module):
     returns the final hidden states of the root nodes after passing through a linear layer.
     """
     def embed_root(self, hmess, tree_tensors, roots):
+        # print("inside embed_root")
+        # print(roots)
         roots = tree_tensors[2].new_tensor(roots) 
+        # print(roots.shape)
         fnode = tree_tensors[0].index_select(0, roots)
         agraph = tree_tensors[2].index_select(0, roots)
 
@@ -268,6 +277,10 @@ class HierMPNEncoderMetalDist(nn.Module):
         1. tree_tensors - fnode, fmess, agraph, bgraph, cgraph, tree_scope
         2. graph_tensors - fnode, fmess, agraph, bgraph, graph_scope
         """
+        # print("Inside HierMPNEncoderMetalDist")
+        # print("fmess - tree_tensors[1] : ",tree_tensors[1].size())
+        # print("agraph - tree_tensors[2] : ",tree_tensors[2].size())
+        # print("bgraph - tree_tensors[3] : ",tree_tensors[3].size())
         tensors = self.embed_graph(graph_tensors)
         # hnode,hmess,agraph,bgraph = tensors
         # print(hnode.size())
@@ -298,14 +311,11 @@ class HierMPNEncoderMetalDist(nn.Module):
         tensors = self.embed_tree(tree_tensors, hinter)
         # print("embed tree success")
         hnode,hmess = self.tree_encoder(*tensors)
-        # print("tree encoder success")
 
         """
         here st is the offsets of the start of each graph.
         """
         hroot = self.embed_root(hmess, tensors, [st for st,le in tree_tensors[-1]])
-        # print("embed root success")
-
         """
         Returns each level of embeddings for the tree, motif and graph along with the root. 
         """
@@ -346,6 +356,9 @@ class IncHierMPNEncoderMetalDist(HierMPNEncoderMetalDist):
         del self.W_root
 
     def get_sub_tensor(self, tensors, subset):
+        """
+        fnode, fmess, agraph, bgraph, cgraph (for tree) are selected based on the subset of nodes and edges present in the subgraph and returned.
+        """
         subnode, submess = subset
         fnode, fmess, agraph, bgraph = tensors[:4]
         fnode, fmess = fnode.index_select(0, subnode), fmess.index_select(0, submess)
@@ -387,6 +400,14 @@ class IncHierMPNEncoderMetalDist(HierMPNEncoderMetalDist):
         return hnode, hmess, agraph, bgraph 
 
     def forward(self, tree_tensors, inter_tensors, graph_tensors, htree, hinter, hgraph, subtree, subgraph):
+        """
+        num_tree_nodes - number of nodes in the tree (motifs)
+        num_graph_nodes - number of nodes in the graph (atoms)
+
+        subgraph[0] - node ids in the subgraph
+        subgraph[1] - edge ids in the subgraph
+
+        """
         num_tree_nodes = tree_tensors[0].size(0)
         num_graph_nodes = graph_tensors[0].size(0)
 
