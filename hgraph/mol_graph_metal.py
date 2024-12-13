@@ -11,9 +11,9 @@ add = lambda x,y : x + y if type(x) is int else (x[0] + y, x[1] + y)
 class MolGraphMetal(object):
 
     BOND_LIST = [Chem.rdchem.BondType.SINGLE, Chem.rdchem.BondType.DOUBLE, Chem.rdchem.BondType.TRIPLE, Chem.rdchem.BondType.AROMATIC] 
-    # MAX_POS = 40
+    MAX_POS = 70
     # MAX_POS = 100
-    MAX_POS=20
+    # MAX_POS=20
 
     def __init__(self, mol, highlight_atoms, xyz_block=None):
         # self.smiles = smiles
@@ -25,7 +25,7 @@ class MolGraphMetal(object):
         """
         atom_coordinates = []
         if xyz_block is not None:
-            print("XYZ block provided")
+            # print("XYZ block provided")
             data_lines=xyz_block.strip().split('\n')
             atom_data_lines = data_lines[2:]
             for i, line in enumerate(atom_data_lines):
@@ -35,18 +35,27 @@ class MolGraphMetal(object):
                 atom_coordinates.append((x, y, z))
             
             self.atom_coordinates = atom_coordinates
-            self.mol=mol
-            self.highlight=highlight_atoms
+            self.mol, self.highlight=self.renumber_molecule(mol, highlight_atoms)
+            # print("length of highlight atoms: ", self.highlight)
             self.mol_graph=self.build_mol_graph_dist()
             self.clusters,self.atom_cls,self.clusters_xyz=self.find_clusters_dist()
+            # print("Number of clusters: ", len(self.clusters))
+            # print("atom_cls: ", self.atom_cls)
+            # print("building tree")
             self.mol_tree, self.tree_motif_cords=self.tree_decomp_dist()
+            # print("number of nodes: ", len(self.mol_tree.nodes))
+            # print("number of edges: ", len(self.mol_tree.edges))
             self.order=self.label_tree_dist()
+            # print("number of edges: ", len(self.mol_tree.edges))
+            # print("order: ", self.order)
+            # print("Number of nodes: ",  len(self.mol_tree.nodes))
+            # print("Number of edges: ", len(self.mol_tree.edges))
+            # print("Order:",self.order)
         
         else:
             print("No xyz block provided")
             self.atom_coordinates=None
-            self.mol=mol
-            self.highlight=highlight_atoms
+            self.mol, self.highlight=self.renumber_molecule(mol,highlight_atoms)
             self.mol_graph = self.build_mol_graph()
             self.clusters, self.atom_cls = self.find_clusters()
             self.mol_tree = self.tree_decomp()
@@ -65,6 +74,21 @@ class MolGraphMetal(object):
         # self.clusters, self.atom_cls = self.find_clusters()
         # self.mol_tree = self.tree_decomp()
         # self.order = self.label_tree()
+
+    def renumber_molecule(self, mol, highlight_atoms):
+        num_atoms = mol.GetNumAtoms()
+        all_atoms = list(range(num_atoms))
+        
+        non_highlight_atoms = [idx for idx in all_atoms if idx not in highlight_atoms]
+        
+        new_order = highlight_atoms + non_highlight_atoms
+        new_index_map = {old_idx: new_idx for new_idx, old_idx in enumerate(new_order)}
+        
+        new_highlight = [new_index_map[idx] for idx in highlight_atoms]
+        
+        mol = Chem.RenumberAtoms(mol, new_order)
+        
+        return mol, new_highlight
 
     def find_clusters(self):
         mol = self.mol
@@ -98,6 +122,13 @@ class MolGraphMetal(object):
 
 
     def find_clusters_dist(self):
+        """
+        clusters constructs bond and ring clusters and stores it. 
+
+        atom_cls - stores the list of clusters each atom belongs to as a list of lists.
+
+        clusters_xyz - stores the coordinats of the atoms in the clusters as a list of lists of coordinates of the atoms in each cluster.
+        """
         clusters_xyz={} # added for distance calculation
         mol = self.mol
         n_atoms = mol.GetNumAtoms()
@@ -123,9 +154,6 @@ class MolGraphMetal(object):
 
         atom_cls = [[] for i in range(n_atoms)]
         
-        """
-        Storing the coordinates of the atoms in the clusters as a list of lists of coordinates of the atoms in each cluster.
-        """
         if self.atom_coordinates is None:
             for i in range(len(clusters)):
                 for atom in clusters[i]:
@@ -359,7 +387,7 @@ class MolGraphMetal(object):
         dfs(order, pa, prev_sib, 0, -1)
         order.append( (0, None, 0) ) #last backtrack at root
         
-        # TODO: Molecule recreation: new clean mol object might be necessary here (to ensure
+        # TODO: Molecule recreation: new clean mol object might be necessary here to ensure
         # fresh atom map numbers), so using self.mol might be wrong. Need to correct outer code accordingly. 
         # mol = get_mol(self.smiles) # modified this to remove smiles input dependency completely
         """
@@ -631,110 +659,354 @@ class MolGraphMetal(object):
     
     @staticmethod
     def tensorize_metal_dist(complexes_names_batch, complexes_ligands, complexes_highlights, complexes_ligandblock, complexes_iron_coord, vocab, avocab):
+        """
+            INPUTS:
+            complexes_names_batch - list of complex names in the batch.
+            complexes_ligands - dictionary with complex names as keys and the set of ligands in the complex as values.
+            complexes_highlights - dictionary with complex names as keys and the highlights (atom indices correspondong to the atoms which are attached to metal_center) of the ligands in the complex as values.
+            complexes_ligandblock - dictionary with complex names as keys and the x,y,z information of the ligands in the complex as values.
+            complexes_iron_coord - dictionary with complex names as keys and the iron coordinates of the complexes as values.
+            vocab - vocabulary for the ligands.
+            avocab - vocabulary for the atoms.
+
+
+            mol_batch_metal_map - stores the MolGraphMetal objects for each ligand in the complexes in the batch.
+            mol_tree_metal_map - stores the mol_tree of the ligands in the complexes in the batch.
+            mol_graph_metal_map - stores the mol_graph of the ligands in the complexes in the batch.
+            mol_ironcoord_map - stores the iron coordinates of the complexes in the batch.
+
+        """
         mol_batch_metal_map = {}
         mol_tree_metal_map = {}
         mol_graph_metal_map = {}
         mol_ironcoord_map = {}
         print(complexes_names_batch)
+        # print(len(complexes_ligands))
 
         for idx, complex in enumerate(complexes_names_batch):
+            print(complex)
             ligands_set = complexes_ligands[complex]
+            print(f"number of ligands in complex: ",len(ligands_set))
             ligands_highlights = complexes_highlights[complex]
             ligands_block = complexes_ligandblock[complex]
             iron_coord=complexes_iron_coord[complex] # modification for distance calculation
             mol_ironcoord_map[complex] = iron_coord
         
             mol_batch_metal_map[complex]=[MolGraphMetal(ligand,ligands_highlights[i+1],ligands_block[i]) for i,ligand in enumerate(ligands_set)]
+            # for i,x in enumerate(mol_batch_metal_map[complex]):
+            #     print(f"ligand {i} length: ",len(x.mol_graph.nodes))
             mol_tree_metal_map[complex] = [x.mol_tree for x in mol_batch_metal_map[complex]]
             mol_graph_metal_map[complex] = [x.mol_graph for x in mol_batch_metal_map[complex]]
-
+        
         print("tree tensors")
-        tree_tensors,tree_batchG=MolGraphMetal.tensorize_graph_metal_dist(complexes_names_batch, mol_tree_metal_map, vocab, mol_ironcoord_map=mol_ironcoord_map)
+        tree_tensors,tree_batchG,treescope_allorders,all_orders =MolGraphMetal.tensorize_graph_metal_dist(complexes_names_batch, mol_tree_metal_map, vocab, mol_ironcoord_map=mol_ironcoord_map)
+        print(len(tree_batchG))
         print("graph tensors")
-        graph_tensors, graph_batchG = MolGraphMetal.tensorize_graph_metal_dist(complexes_names_batch, mol_graph_metal_map, avocab, mol_ironcoord_map,('Fe',0), use_highlights=True)
+        graph_tensors, graph_batchG,graphscope_allorders = MolGraphMetal.tensorize_graph_metal_dist(complexes_names_batch, mol_graph_metal_map, avocab, mol_ironcoord_map,('Fe',0), use_highlights=True)
+        print(len(graph_batchG))
+
+        print("length of all orders: ",len(all_orders))
+        print("all_orders for the first complex: ",all_orders[0])
+        # exit()
+
 
         tree_scope = tree_tensors[-1]
         graph_scope = graph_tensors[-1] 
 
         max_cls_size=max([len(c) for x in complexes_names_batch for mgm in mol_batch_metal_map[x] for c in mgm.clusters])
-        cgraph = torch.zeros(len(tree_batchG) + 1 + len(complexes_names_batch), max_cls_size).int()
+        cgraph = torch.zeros(len(tree_batchG) + 1, max_cls_size).int()
 
+        """
+        Corresponding to each node in the tree (i.e. motif), we store the corresponding atoms of that motif in the graph as a cluster in cgraph. So cgraph is a tensor of size (number of motifs, max number of atoms in a motif). each cgraph entry consists of the atom indices of that cluster. 
+        """
+        print("cgraph")
+        root_scope_iter=0
         for v,attr in tree_batchG.nodes(data=True):
-            bid = attr['batch_id']
-            offset = graph_scope[bid][0]
-            tree_batchG.nodes[v]['inter_label'] = inter_label = [(x + offset, y) for x,y in attr['inter_label']]
-            tree_batchG.nodes[v]['cluster'] = cls = [x + offset for x in attr['cluster']]
-            tree_batchG.nodes[v]['assm_cands'] = [add(x, offset) for x in attr['assm_cands']]
-            cgraph[v, :len(cls)] = torch.IntTensor(cls)
+            if attr['batch_id'] is not None:
+                bid = attr['batch_id']
+                offset = graphscope_allorders[bid][0]
+                print("offset: ",offset)
+                tree_batchG.nodes[v]['inter_label'] = inter_label = [(x + offset, y) for x,y in attr['inter_label']]
+                tree_batchG.nodes[v]['cluster'] = cls = [x +offset for x in attr['cluster']]
+                tree_batchG.nodes[v]['assm_cands'] = [add(x, offset) for x in attr['assm_cands']]
+                cgraph[v, :len(cls)] = torch.IntTensor(cls)
+                print(cls)
+            else:
+                offset = graph_scope[root_scope_iter][0]
+                print("offset root: ",offset)
+                tree_batchG.nodes[v]['cluster']=cls=[x + offset for x in attr['cluster']]
+                tree_batchG.nodes[v]['assm_cands']=[add(x, offset) for x in attr['assm_cands']]
+                cgraph[v,:len(cls)]=torch.IntTensor(cls)
+                root_scope_iter+=1
+                print(cls)
         
-        all_orders = []
-        i = 0
-        for mol_list in mol_batch_metal_map.values():
-            for hmol in mol_list:
-                offset=tree_scope[i][0]
-                order = [(x + offset, y + offset, z) for x,y,z in hmol.order[:-1]] + [(hmol.order[-1][0] + offset, None, 0)]
-                all_orders.append(order)
-                i += 1
+        # all_orders = []
+        # i = 0
+        # for mol_list in mol_batch_metal_map.values():
+        #     for hmol in mol_list:
+        #         offset=tree_scope[i][0]
+        #         order = [(x + offset, y + offset, z) for x,y,z in hmol.order[:-1]] + [(hmol.order[-1][0] + offset, None, 0)]
+        #         all_orders.append(order)
+        #         i += 1
+
+        # all_orders = []
+        # i=0
+        # for mol_list in mol_batch_metal_map.values():
+        #     cumulative_order = []  # To accumulate tuples for all hmol in the current mol_list
+        #     for hmol in mol_list:
+        #         offset = treescope_allorders[i][0]
+        #         cumulative_order.extend([(x + offset, y + offset, z) for x, y, z in hmol.order[:-1]] + [(hmol.order[-1][0] + offset, None, 0)])
+        #         i += 1
+        #     all_orders.append(cumulative_order)  # Append accumulated order for the entire mol_list
+
 
         tree_tensors = tree_tensors[:4] + (cgraph, tree_scope)
+
         return (tree_batchG, graph_batchG), (tree_tensors, graph_tensors), all_orders
+
+    # def tensorize_metal_dist(complexes_names_batch, complexes_ligands, complexes_highlights, complexes_ligandblock, complexes_iron_coord, vocab, avocab):
+    #     """
+    #     INPUTS:
+    #     complexes_names_batch - list of complex names in the batch.
+    #     complexes_ligands - dictionary with complex names as keys and the set of ligands in the complex as values.
+    #     complexes_highlights - dictionary with complex names as keys and the highlights (atom indices correspondong to the atoms which are attached to metal_center) of the ligands in the complex as values.
+    #     complexes_ligandblock - dictionary with complex names as keys and the x,y,z information of the ligands in the complex as values.
+    #     complexes_iron_coord - dictionary with complex names as keys and the iron coordinates of the complexes as values.
+    #     vocab - vocabulary for the ligands.
+    #     avocab - vocabulary for the atoms.
+
+
+    #     mol_batch_metal_map - stores the MolGraphMetal objects for each ligand in the complexes in the batch.
+    #     mol_tree_metal_map - stores the mol_tree of the ligands in the complexes in the batch.
+    #     mol_graph_metal_map - stores the mol_graph of the ligands in the complexes in the batch.
+    #     mol_ironcoord_map - stores the iron coordinates of the complexes in the batch.
+
+    #     """
+    #     mol_batch_metal_map = {}
+    #     mol_tree_metal_map = {}
+    #     mol_graph_metal_map = {}
+    #     mol_ironcoord_map = {}
+    #     print(complexes_names_batch)
+    #     # print(len(complexes_ligands))
+
+    #     for idx, complex in enumerate(complexes_names_batch):
+    #         print(complex)
+    #         ligands_set = complexes_ligands[complex]
+    #         print(len(ligands_set))
+    #         ligands_highlights = complexes_highlights[complex]
+    #         ligands_block = complexes_ligandblock[complex]
+    #         iron_coord=complexes_iron_coord[complex] # modification for distance calculation
+    #         mol_ironcoord_map[complex] = iron_coord
+        
+    #         mol_batch_metal_map[complex]=[MolGraphMetal(ligand,ligands_highlights[i+1],ligands_block[i]) for i,ligand in enumerate(ligands_set)]
+    #         for i,x in enumerate(mol_batch_metal_map[complex]):
+    #             print(f"ligand {i} length: ",len(x.mol_graph.nodes))
+    #         mol_tree_metal_map[complex] = [x.mol_tree for x in mol_batch_metal_map[complex]]
+    #         mol_graph_metal_map[complex] = [x.mol_graph for x in mol_batch_metal_map[complex]]
+
+    #     print("tree tensors")
+    #     tree_tensors,tree_batchG,treescope_allorders=MolGraphMetal.tensorize_graph_metal_dist(complexes_names_batch, mol_tree_metal_map, vocab, mol_ironcoord_map=mol_ironcoord_map)
+    #     print("graph tensors")
+    #     graph_tensors, graph_batchG,graphscope_allorders = MolGraphMetal.tensorize_graph_metal_dist(complexes_names_batch, mol_graph_metal_map, avocab, mol_ironcoord_map,('Fe',0), use_highlights=True)
+
+    #     tree_scope = tree_tensors[-1]
+    #     graph_scope = graph_tensors[-1] 
+
+    #     max_cls_size=max([len(c) for x in complexes_names_batch for mgm in mol_batch_metal_map[x] for c in mgm.clusters])
+    #     cgraph = torch.zeros(len(tree_batchG) + 1 + len(complexes_names_batch), max_cls_size).int()
+
+    #     """
+    #     Corresponding to each node in the tree (i.e. motif), we store the corresponding atoms of that motif in the graph as a cluster in cgraph. So cgraph is a tensor of size (number of motifs, max number of atoms in a motif). each cgraph entry consists of the atom indices of that cluster. 
+    #     """
+    #     # print("cgraph")
+    #     for v,attr in tree_batchG.nodes(data=True):
+    #         bid = attr['batch_id']
+    #         offset = graphscope_allorders[bid][0]
+    #         tree_batchG.nodes[v]['inter_label'] = inter_label = [(x + offset, y) for x,y in attr['inter_label']]
+    #         tree_batchG.nodes[v]['cluster'] = cls = [x + offset for x in attr['cluster']]
+    #         tree_batchG.nodes[v]['assm_cands'] = [add(x, offset) for x in attr['assm_cands']]
+    #         cgraph[v, :len(cls)] = torch.IntTensor(cls)
+        
+    #     # all_orders = []
+    #     # i = 0
+    #     # for mol_list in mol_batch_metal_map.values():
+    #     #     for hmol in mol_list:
+    #     #         offset=tree_scope[i][0]
+    #     #         order = [(x + offset, y + offset, z) for x,y,z in hmol.order[:-1]] + [(hmol.order[-1][0] + offset, None, 0)]
+    #     #         all_orders.append(order)
+    #     #         i += 1
+
+    #     all_orders = []
+    #     i=0
+    #     for mol_list in mol_batch_metal_map.values():
+    #         cumulative_order = []  # To accumulate tuples for all hmol in the current mol_list
+    #         for hmol in mol_list:
+    #             offset = treescope_allorders[i][0]
+    #             cumulative_order.extend([(x + offset, y + offset, z) for x, y, z in hmol.order[:-1]] + [(hmol.order[-1][0] + offset, None, 0)])
+    #             i += 1
+    #         all_orders.append(cumulative_order)  # Append accumulated order for the entire mol_list
+
+
+    #     tree_tensors = tree_tensors[:4] + (cgraph, tree_scope)
+    #     return (tree_batchG, graph_batchG), (tree_tensors, graph_tensors), all_orders
     
     def tensorize_graph_metal_dist(complexes_names_batch, mol_metal_map_batch, vocab, mol_ironcoord_map, iron_tuple=('Fe', 'Fe:2'), use_highlights=False):
+        """
+        fnode - unique node indices correspondning to the vocabulary of the motifs and atoms in the graph.
+
+        fmess - edge information between the nodes in the graph. It consists of the source node, target node, bond_type(for atoms)/position_encoding(for motifs), child_order(for atoms)/0(for motifs), and the euclidean distance.
+
+        agraph - stores all the incoming edge ids for each node in the graph.
+
+        bgraph - for a node v, let u be the node such that there exists u->v. Then bgraph stores the edge ids of the incoming edges to u. The indexing of bgraph is done based on the edge id of the edge from u->v.
+
+        scope - stores the offset and length of each complex in the batch. Basically signifies the root node of each complex in the batch and the length of the complex from that root node.
+
+        scope_allorders - stores the offset and length of each ligand in the batch. Basically signifies the root node of each ligand in the batch and the length of the ligand from that root node.
+
+        edge_dict - stores the edge id of the edge between two nodes in the graph.
+
+        all_G - stores the union of graph objects of all the complexes in the batch.
+
+        bid - batch id for each ligand in the batch.
+
+        #^ for each complex:
+            
+            #& 1. append the iron node manually as the root node to the fnode list and create a corresponding entry for the node in agraph. 
+
+            #& 2. add the offset for this complex into the scope list.
+
+            #& 3. create a networkx complex_graph object for the complex and add the iron node to the complex_graph with the corresponding attributes.
+
+            #& 4. for each ligand in the complex:
+
+                a. add the offset of this ligand to the scope_allorders list.
+
+                b. append the nodes of the ligand to the fnode list and create a corresponding entry for the nodes in agraph.
+
+                c. add the nodes and edges of the ligand with their attributes to the complex_graph. 
+
+                d. add the bond information between the iron node and the attachment points at the ligands in the graph into fmess and the edge_id into agraph of the incoming node. At the same time, add the reverse edge as well. Create bgraph entries for both edges. (This is done both at atom and motif level. For the positional encoding at motif level, we keep it at -1 while adding and address this later. For atom level, the child order is taken as zero because the condition for assm_cands in label_tree is not satisfied when we see the parent atom as the iron atom.)
+
+                e. now iterate over the edges of the ligand itself add edge information to fmess and the edge_id to agraph of the incoming node. Create bgraph entries for the edges.
+
+            #& 5. add the bgraph entries for the edges within each ligand as well as between the iron node and the ligands using complex_graph. We are doing this instead of the previous approach because we need to consider the edges between the iron node and the ligands as well and individual ligand graphs G within the loop do not have that information. complex_graph has this information only after processing all the ligands.
+
+            #& 6. add the positional encoding between the iron nodes and the nodes attached to the iron node in the graph at the motif level. We sort the nodes which are attached to the iron node and then assign the index as the positional encoding at the tree level for each motif. (This same procedure is done while assigning the positional encoding to the edges in the dfs traversal of the tree inside the label_tree function.)
+
+            #& 7. for the scope of this complex, update the length of the complex with complex_length now that all the ligands are processed and we have the total length of the molecule. 
+
+            #& 8. append the complex_graph object to the all_G list.
+        
+
+        """
 
         fnode, fmess = [None], [(0, 0, 0, 0, 0)]
         agraph, bgraph = [[]], [[]]
         scope = []
+        scope_allorders=[]
         edge_dict = {}
         all_G = []
         bid = 0
+        trees_allorders=[]
 
-        for complex_name in complexes_names_batch:
+        for complex_id, complex_name in enumerate(complexes_names_batch):
+            print(complex_name)
             iron_coord=mol_ironcoord_map[complex_name] # modification for distance calculation
             graphs = mol_metal_map_batch[complex_name]
 
+
+            offset = len(fnode)
+            scope.append((offset, len(graphs)))
+            # scope_allorders.append((offset, 1))
             iron_index = len(fnode)
+            print("iron_index: ",iron_index)
             fnode.append(vocab[iron_tuple])
             agraph.append([])
+            complex_length=1
+
+            complex_graph=nx.DiGraph()#!
+            if use_highlights:
+                complex_graph.add_node(iron_index, coordinates=iron_coord, label=('Fe',0), highlight=None, batch_id=None)#!
+            else:
+                complex_graph.add_node(iron_index, ismiles='Fe:2', smiles='Fe', coordinates=iron_coord, label=iron_tuple, assm_cands=[], batch_id=None, inter_label=None,
+                                       cluster=[0])#!
 
             for G in graphs:
+                print("ligand length : ",len(G))
+                complex_length+=len(G)
                 offset = len(fnode)
-                scope.append((offset, len(G)))
+                scope_allorders.append((offset, len(G)))
                 G = nx.convert_node_labels_to_integers(G, first_label=offset)
-                all_G.append(G)
+                # all_G.append(G) #!
                 fnode.extend([None for v in G.nodes])
 
+                # print("motif indices")
                 for v, attr in G.nodes(data='label'):
+                    # print(v)
                     G.nodes[v]['batch_id'] = bid
                     fnode[v] = vocab[attr]
                     agraph.append([])
                 
                 bid += 1
+                complex_graph = nx.compose(complex_graph, G) #!
 
                 """
                 Storing the new bonds information between the new iron node and the ligands in the graph. At the atom level, it will be just the bond type. To take care of this, we are defining a new bond type for the iron-ligand bonds denoted by index 4. Previously other 4 bond types were defined as 0, 1, 2, 3 for single, double, triple, and aromatic bonds respectively.
+
+                use_highlights is done for graph level. else is done for motif level.
                 """
                 if use_highlights:
+
                     for v, attr in G.nodes(data=True):
                         if attr.get('highlight') == 1:  # Check if the node is highlighted
+                            
                             coords=attr['coordinates']
                             dist=np.linalg.norm(np.array(iron_coord)-np.array(coords))
-                            fmess.append((iron_index, v, 4, 0, dist)) # New bond type index 4 for iron-ligand bonds
+
+                            fmess.append((iron_index, v, 4, 0, dist)) # ! New bond type index 4 for iron-ligand bonds - assigning 0 for child order because the condition for assm_cands in label_tree is not satisfied when we see the parent atom as the iron atom.
                             edge_dict[(iron_index, v)] = eid = len(edge_dict) + 1
+                            complex_graph.add_edge(iron_index, v, weight=1, label=4, euclidean_distance=dist)#!
+                            complex_graph[iron_index][v]['mess_idx'] = eid
                             agraph[v].append(eid)
                             bgraph.append([])
+
+                            # ! we need bidirectional edges so adding the reverse edge as well.
+                            fmess.append((v, iron_index, 4, 0, dist))
+                            edge_dict[(v, iron_index)] = eid = len(edge_dict) + 1
+                            complex_graph.add_edge(v, iron_index, weight=1, label=4, euclidean_distance=dist)#!
+                            complex_graph[v][iron_index]['mess_idx'] = eid
+                            agraph[iron_index].append(eid)
+                            bgraph.append([])
+                            break #! we are breaking to avoid formation of loops as seen in the example of FRMFTE10 ring.
+
                 else:
+
                     for v, attr in G.nodes(data=True):
                         label_attr=attr['label']
                         if ':2' in label_attr[1]:  # Check if the ismiles label contains ':2'
                             coords=attr['coordinates']
                             dist=np.linalg.norm(np.array(iron_coord)-np.array(coords))
-                            fmess.append((iron_index, v, -1, -1, dist))  # Initialize it with -1 for now because we will need sorted order for this later on.
+
+                            fmess.append((iron_index, v, 0, 0, dist))  # in the dfs ordering parent->child position encoding is put as zero so following the same here.
                             edge_dict[(iron_index, v)] = eid = len(edge_dict) + 1
+                            complex_graph.add_edge(iron_index, v, weight=1, euclidean_distsance=dist, label=0)#!
+                            complex_graph[iron_index][v]['mess_idx'] = eid
                             agraph[v].append(eid)
                             bgraph.append([])
 
+                            # ! we need bidirectional edges so adding the reverse edge as well.
+                            fmess.append((v, iron_index, -1, -1, dist)) # Initialize it with -1 for now because we will need sorted order for this later on to assign the positional encoding.
+                            edge_dict[(v, iron_index)] = eid = len(edge_dict) + 1
+                            complex_graph.add_edge(v, iron_index, weight=1, euclidean_distsance=dist, label=-1)#!
+                            complex_graph[v][iron_index]['mess_idx'] = eid
+                            agraph[iron_index].append(eid)
+                            bgraph.append([])
+                            break #! we are breaking to avoid formation of loops as seen in the example of FRMFTE10 ring. 
+                            
+                            
                 """
-                For attributes of edges at the ATOM level, the type can be a tuple because some modification is being done in the assm_cands part of the code in label_tree function for the self.mol_graph object. As of now, i have only encountered the tuple type at the atom level and not at the motif level. For the motif level, the edge attribute is a positional encoding as stored during the dfs traversal of the tree.
+                For attributes of edges at the ATOM level, the type can be a tuple because some modification is being done in the assm_cands part of the code in label_tree function for the self.mol_graph object. As of now, i have only encountered the tuple type at the atom level and not at the motif level. For the motif level, the edge attribute is a single positional encoding as stored during the dfs traversal of the tree.
                 """
                 for u, v, attr in G.edges(data=True):
                     label_attr=attr['label']
@@ -744,50 +1016,215 @@ class MolGraphMetal(object):
                     else:
                         fmess.append((u, v, label_attr, 0, distance))
                     edge_dict[(u, v)] = eid = len(edge_dict) + 1
-                    G[u][v]['mess_idx'] = eid
+                    # G[u][v]['mess_idx'] = eid
+                    complex_graph[u][v]['mess_idx'] = eid
                     agraph[v].append(eid)
                     bgraph.append([])
 
-                for u, v in G.edges:
-                    eid = edge_dict[(u, v)]
-                    for w in G.predecessors(u):
-                        if w == v:
-                            continue
-                        bgraph[eid].append(edge_dict[(w, u)])
+                # for u, v in G.edges:
+                #     eid = edge_dict[(u, v)]
+                #     for w in G.predecessors(u):
+                #         if w == v:
+                #             continue
+                #         bgraph[eid].append(edge_dict[(w, u)])
             
+            #! Populating bgraph for the edges within each ligand as well as between the iron node and the ligands using complex_graph.
+            for u,v in complex_graph.edges:
+                eid=edge_dict[(u,v)]
+                for w in complex_graph.predecessors(u):
+                    if w==v:
+                        continue
+                    bgraph[eid].append(edge_dict[(w,u)])
+            
+            scope[complex_id]=(scope[complex_id][0],complex_length)
             """
             Adding the bond information between the iron node and the ligands in the graph at the motif level. We sort the nodes which are attached to the iron node and then assign the index as the positional encoding at the tree level for each motif. 
             """
-            neg_nodes = [fm[1] for fm in fmess if fm[2] == -1 and fm[3] == -1]
+            neg_nodes = [fm[0] for fm in fmess if fm[2] == -1 and fm[3] == -1]
             sorted_neg_nodes = sorted(neg_nodes)
             neg_node_map = {node: idx+1 for idx, node in enumerate(sorted_neg_nodes)}
             for i, fm in enumerate(fmess):
                 if fm[2] == -1 and fm[3] == -1:
-                    updated_fmess = (fm[0], fm[1], neg_node_map[fm[1]], 0, fm[4])
+                    updated_fmess = (fm[0], fm[1], neg_node_map[fm[0]], 0, fm[4])
                     fmess[i] = updated_fmess
 
-            neg_nodes = [fm[1] for fm in fmess if fm[2] == -1 and fm[3] == -1]
+            all_G.append(complex_graph) #!
+            if use_highlights==False:
+                def dfs_complex(order,pa,prev_sib,x,fa):
+                    pa[x]=fa
+                    if x in complex_graph:
+                        sorted_child = sorted([ y for y in complex_graph[x] if y != fa ])
+                    else:
+                        raise Exception("Node not found in complex graph")
+                    
+                    for idx,y in enumerate(sorted_child):
+                        complex_graph[x][y]['label'] = 0
+                        complex_graph[y][x]['label'] = idx+1
+                        prev_sib[y] = sorted_child[:idx] 
+                        prev_sib[y] += [x, fa] if fa >= 0 else [x]
+                        order.append( (x,y,1) )
+                        dfs_complex(order, pa, prev_sib, y, x)
+                        order.append( (y,x,0) )
+                order,pa=[],{}
+                print(len(complex_graph))
+                prev_sib=[[] for i in range(len(complex_graph)+iron_index)]
+                dfs_complex(order,pa,prev_sib,iron_index,-1)
+                order.append((iron_index,None,0))
+                trees_allorders.append(order)
+
 
         fnode[0] = fnode[1]  # Set the first node to the iron node
         fnode = torch.IntTensor(fnode)
         fmess=torch.FloatTensor(fmess)
-        print(fmess.shape)
-        print(fmess.dtype)
-        print(fmess[6])
-        # print(fmess[5,1])
-        # print(fmess[5,2])
-        # print(fmess[5,3])
-        # print(fmess[5,4])
-        # fmess = torch.IntTensor(fmess)
-        # print(fmess[:,0].dtype)
-        # print(fmess[:,1].dtype)
-        # print(fmess[:,2].dtype)
-        # print(fmess[:,3].dtype)
-        # print(fmess[:,4].dtype)
         agraph = create_pad_tensor(agraph)
         bgraph = create_pad_tensor(bgraph)
+        if use_highlights:
+            return (fnode, fmess, agraph, bgraph, scope), nx.union_all(all_G), scope_allorders
+        else:
+            return (fnode, fmess, agraph, bgraph, scope), nx.union_all(all_G), scope_allorders, trees_allorders
+    
+    
+    # def tensorize_graph_metal_dist(complexes_names_batch, mol_metal_map_batch, vocab, mol_ironcoord_map, iron_tuple=('Fe', 'Fe:2'), use_highlights=False):
+    #     """
+    #     fnode - unique node indices correspondning to the vocabulary of the motifs and atoms in the graph.
 
-        return (fnode, fmess, agraph, bgraph, scope), nx.union_all(all_G)
+    #     fmess - edge information between the nodes in the graph. It consists of the source node, target node, bond_type(for atoms)/position_encoding(for motifs), child_order(for atoms)/0(for motifs), and the euclidean distance.
+
+    #     agraph - stores all the incoming edge ids for each node in the graph.
+
+    #     bgraph - for a node v, let u be the node such that there exists u->v. Then bgraph stores the edge ids of the incoming edges to u. The indexing of bgraph is done based on the edge id of the edge from u->v.
+        
+
+    #     """
+
+    #     fnode, fmess = [None], [(0, 0, 0, 0, 0)]
+    #     agraph, bgraph = [[]], [[]]
+    #     scope = []
+    #     scope_allorders=[]
+    #     edge_dict = {}
+    #     all_G = []
+    #     bid = 0
+
+    #     for complex_id, complex_name in enumerate(complexes_names_batch):
+    #         iron_coord=mol_ironcoord_map[complex_name] # modification for distance calculation
+    #         graphs = mol_metal_map_batch[complex_name]
+
+    #         offset = len(fnode)
+    #         scope.append((offset, len(graphs)))
+    #         # scope_allorders.append((offset, 1))
+    #         iron_index = len(fnode)
+    #         fnode.append(vocab[iron_tuple])
+    #         agraph.append([])
+    #         complex_length=1
+
+    #         for G in graphs:
+    #             complex_length+=len(G)
+    #             offset = len(fnode)
+    #             scope_allorders.append((offset, len(G)))
+    #             G = nx.convert_node_labels_to_integers(G, first_label=offset)
+    #             all_G.append(G)
+    #             fnode.extend([None for v in G.nodes])
+
+    #             for v, attr in G.nodes(data='label'):
+    #                 G.nodes[v]['batch_id'] = bid
+    #                 fnode[v] = vocab[attr]
+    #                 agraph.append([])
+                
+    #             bid += 1
+
+    #             """
+    #             Storing the new bonds information between the new iron node and the ligands in the graph. At the atom level, it will be just the bond type. To take care of this, we are defining a new bond type for the iron-ligand bonds denoted by index 4. Previously other 4 bond types were defined as 0, 1, 2, 3 for single, double, triple, and aromatic bonds respectively.
+
+    #             use_highlights is done for graph level. else is done for motif level.
+    #             """
+    #             if use_highlights:
+    #                 for v, attr in G.nodes(data=True):
+    #                     if attr.get('highlight') == 1:  # Check if the node is highlighted
+    #                         coords=attr['coordinates']
+    #                         dist=np.linalg.norm(np.array(iron_coord)-np.array(coords))
+    #                         fmess.append((iron_index, v, 4, 0, dist)) # ! New bond type index 4 for iron-ligand bonds - 0 is given for child order but need to put the logic of assm_cands here.
+    #                         edge_dict[(iron_index, v)] = eid = len(edge_dict) + 1
+    #                         agraph[v].append(eid)
+    #                         bgraph.append([])
+    #                         # ! we need bidirectional edges so adding the reverse edge as well.
+    #                         fmess.append((v, iron_index, 4, 0, dist))
+    #                         edge_dict[(v, iron_index)] = eid = len(edge_dict) + 1
+    #                         agraph[iron_index].append(eid)
+    #                         bgraph.append([])
+    #             else:
+    #                 for v, attr in G.nodes(data=True):
+    #                     label_attr=attr['label']
+    #                     if ':2' in label_attr[1]:  # Check if the ismiles label contains ':2'
+    #                         coords=attr['coordinates']
+    #                         dist=np.linalg.norm(np.array(iron_coord)-np.array(coords))
+    #                         fmess.append((iron_index, v, -1, -1, dist))  # Initialize it with -1 for now because we will need sorted order for this later on.
+    #                         edge_dict[(iron_index, v)] = eid = len(edge_dict) + 1
+    #                         agraph[v].append(eid)
+    #                         bgraph.append([])
+    #                         # ! we need bidirectional edges so adding the reverse edge as well.
+    #                         fmess.append((v, iron_index, -1, -1, dist))
+    #                         edge_dict[(v, iron_index)] = eid = len(edge_dict) + 1
+    #                         agraph[iron_index].append(eid)
+    #                         bgraph.append([])
+
+    #             """
+    #             For attributes of edges at the ATOM level, the type can be a tuple because some modification is being done in the assm_cands part of the code in label_tree function for the self.mol_graph object. As of now, i have only encountered the tuple type at the atom level and not at the motif level. For the motif level, the edge attribute is a positional encoding as stored during the dfs traversal of the tree.
+    #             """
+    #             for u, v, attr in G.edges(data=True):
+    #                 label_attr=attr['label']
+    #                 distance=attr['euclidean_distance']
+    #                 if type(label_attr) is tuple:
+    #                     fmess.append((u, v, label_attr[0], label_attr[1], distance))
+    #                 else:
+    #                     fmess.append((u, v, label_attr, 0, distance))
+    #                 edge_dict[(u, v)] = eid = len(edge_dict) + 1
+    #                 G[u][v]['mess_idx'] = eid
+    #                 agraph[v].append(eid)
+    #                 bgraph.append([])
+
+    #             for u, v in G.edges:
+    #                 eid = edge_dict[(u, v)]
+    #                 for w in G.predecessors(u):
+    #                     if w == v:
+    #                         continue
+    #                     bgraph[eid].append(edge_dict[(w, u)])
+            
+    #         scope[complex_id]=(scope[complex_id][0],complex_length)
+            
+    #         """
+    #         Adding the bond information between the iron node and the ligands in the graph at the motif level. We sort the nodes which are attached to the iron node and then assign the index as the positional encoding at the tree level for each motif. 
+    #         """
+    #         neg_nodes = [fm[1] for fm in fmess if fm[2] == -1 and fm[3] == -1]
+    #         sorted_neg_nodes = sorted(neg_nodes)
+    #         neg_node_map = {node: idx+1 for idx, node in enumerate(sorted_neg_nodes)}
+    #         for i, fm in enumerate(fmess):
+    #             if fm[2] == -1 and fm[3] == -1:
+    #                 updated_fmess = (fm[0], fm[1], neg_node_map[fm[1]], 0, fm[4])
+    #                 fmess[i] = updated_fmess
+
+    #         neg_nodes = [fm[1] for fm in fmess if fm[2] == -1 and fm[3] == -1]
+        
+
+    #     fnode[0] = fnode[1]  # Set the first node to the iron node
+    #     fnode = torch.IntTensor(fnode)
+    #     fmess=torch.FloatTensor(fmess)
+    #     # print(fmess.shape)
+    #     # print(fmess.dtype)
+    #     # print(fmess[6])
+    #     # print(fmess[5,1])
+    #     # print(fmess[5,2])
+    #     # print(fmess[5,3])
+    #     # print(fmess[5,4])
+    #     # fmess = torch.IntTensor(fmess)
+    #     # print(fmess[:,0].dtype)
+    #     # print(fmess[:,1].dtype)
+    #     # print(fmess[:,2].dtype)
+    #     # print(fmess[:,3].dtype)
+    #     # print(fmess[:,4].dtype)
+    #     agraph = create_pad_tensor(agraph)
+    #     bgraph = create_pad_tensor(bgraph)
+
+    #     return (fnode, fmess, agraph, bgraph, scope), nx.union_all(all_G), scope_allorders
         
 if __name__ == "__main__":
     import sys
