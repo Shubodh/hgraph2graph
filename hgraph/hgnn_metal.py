@@ -91,6 +91,12 @@ class HierVAEMetalDist(nn.Module):
         self.R_mean = nn.Linear(args.hidden_size, args.latent_size)
         self.R_var = nn.Linear(args.hidden_size, args.latent_size)
     
+    """
+    z_mean is the mean of the latent space
+    z_log_var is the log of the variance of the latent space
+    if perturb is True, then we add some noise to the latent space. The noise is sampled from a normal distribution.
+    z_vecs is a sample from the latent space.
+    """
     def rsample(self, z_vecs, W_mean, W_var, perturb=True): # this is the reparametrization trick
         batch_size = z_vecs.size(0)
         z_mean = W_mean(z_vecs)
@@ -120,14 +126,14 @@ class HierVAEMetalDist(nn.Module):
 
         root_vecs, root_kl = self.rsample(root_vecs, self.R_mean, self.R_var, perturb_z)
         kl_div = root_kl
-        print("encoding done")
-        print('kl_div Inside:',kl_div)
+        # print("encoding done")
+        # print('kl_div Inside:',kl_div)
         # print("encoding: ",root_vecs)
 
         # try:
-        loss,wacc,iacc,tacc,sacc = self.decoder((root_vecs, root_vecs, root_vecs), graphs, tensors, orders)
+        loss,wacc,iacc,tacc,sacc,dist_loss = self.decoder((root_vecs, root_vecs, root_vecs), graphs, tensors, orders)
         # except Exception as e:
         #     print("Error in decoder")
         #     print(e)
         #     return 0,0,0,0,0,0
-        return loss + beta * kl_div, kl_div.item(), wacc, iacc, tacc, sacc
+        return loss + beta * kl_div, kl_div.item(), wacc, iacc, tacc, sacc, dist_loss
