@@ -88,7 +88,7 @@ class HierMPNDecoderMetalDist(nn.Module):
         )
         self.W_assm = nn.Linear(hidden_size, latent_size)
 
-        self.W_dist=nn.Linear(hidden_size, 1) #! linear layer for distance prediction
+        self.W_dist=nn.Linear(hidden_size, 1) #! linear layer for distance prediction - try putting non-linearity here. 
 
         if latent_size != hidden_size:
             self.W_root = nn.Linear(latent_size, hidden_size)
@@ -154,6 +154,8 @@ class HierMPNDecoderMetalDist(nn.Module):
             for nid in graph_batch[zid]:
                 if nid not in new_atom_set: continue
                 new_bonds.append( graph_batch[zid][nid]['mess_idx'] )
+        
+        # print("new_bonds:",new_bonds)
 
         new_bond_index = hgraph.emask.new_tensor(new_bonds)
         if len(new_bonds) > 0:
@@ -353,10 +355,13 @@ class HierMPNDecoderMetalDist(nn.Module):
         """
         for i in range(batch_size):
             root = tree_batch.nodes[ tree_scope[i][0] ]
-            clab, ilab = self.vocab[ root['label'] ]
+            clab, ilab = self.vocab[ root['label'] ] # label here is (smiles,ismiles) for the partiicular node. vocab maps it to a unique index for the cluster (clab) and another unique index for the tuple (ilab)
             all_cls_preds.append( (init_vecs[i], i, clab, ilab) ) #cluster prediction
             new_atoms.extend(root['cluster'])
         
+        print("new_atoms:",new_atoms)
+        print("tree_scope:",tree_scope)     
+        # exit()   
         # print("new_atoms:",new_atoms)
 
         """
@@ -392,7 +397,7 @@ class HierMPNDecoderMetalDist(nn.Module):
 
         batch_list - contains the indices of trees in the batch that still have steps to process at time t. Ensures only trees that need updates at this step are processed.
 
-        subtree: For each tree in batch_list, retrieves the current node (xid), its child node (yid), and the label (tlab) from orders. Adds xid to subtree[0] and message indices (mess_idx) to subtree[1] if a child node exists (yid is not None).
+        subtree: For each tree in batch_list, retrieves the current node (xid), its child node (yid), and the label (tlab) from the dfs order. Adds xid to subtree[0] and message indices (mess_idx) to subtree[1] if a child node exists (yid is not None).
 
         Converts subtree lists into tensors for further processing.
         
@@ -406,6 +411,7 @@ class HierMPNDecoderMetalDist(nn.Module):
         # New prediction of distances
         all_dist_preds_tree=[]
         # all_dist_preds_inter=[]
+        # print(orders[0])
 
 
         for t in range(maxt):
@@ -415,10 +421,12 @@ class HierMPNDecoderMetalDist(nn.Module):
             subtree = [], []
             for i in batch_list:
                 xid, yid, tlab = orders[i][t]
-                subtree[0].append(xid)
-                if yid is not None:
+                subtree[0].append(xid) #storing the parent 
+                if yid is not None: # if child is present. 
                     mess_idx = tree_batch[xid][yid]['mess_idx']
                     subtree[1].append(mess_idx)
+            # print("subtree: ", subtree)
+            # exit()
 
             subtree = htree.emask.new_tensor(subtree[0]), htree.emask.new_tensor(subtree[1]) 
             htree.emask.scatter_(0, subtree[1], 1)
@@ -442,8 +450,11 @@ class HierMPNDecoderMetalDist(nn.Module):
 
 
             """
-
+            #! we can extract distances at the graph level.
+            # ! normalization can maybe help to converge. If we can normalize the coordinates in a range of 0 to 1. 
             new_atoms = []
+            # print("htree.node:",htree.node[1])
+            # exit()
             for i in batch_list:
                 xid, yid, tlab = orders[i][t]
                 all_topo_preds.append( (htree.node[xid], i, tlab) ) #topology prediction
@@ -451,7 +462,7 @@ class HierMPNDecoderMetalDist(nn.Module):
                     mess_idx = tree_batch[xid][yid]['mess_idx']
                     new_atoms.extend( tree_batch.nodes[yid]['cluster'] ) #NOTE: regardless of tlab = 0 or 1
                     # distance prediction. 
-                    hmess = self.rnn_cell.get_hidden_state(htree.mess)
+                    hmess = self.rnn_cell.get_hidden_state(hinter.mess)
                     e_dist=self.W_dist(hmess[mess_idx])
                     all_dist_preds_tree.append(e_dist)
 
