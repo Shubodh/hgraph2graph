@@ -675,6 +675,12 @@ class MolGraphMetal(object):
             mol_graph_metal_map - stores the mol_graph of the ligands in the complexes in the batch.
             mol_ironcoord_map - stores the iron coordinates of the complexes in the batch.
 
+            tree_scope and graph_scope inside the tree_tensors and graph_tensors are the scope tensors storing the root nodes index alongwith the length of that corresponding complex for the tree and graph tensors respectively.
+
+            treescope_allorders and graphscope_allorders store the offset for each ligand within each complex to be used in the offset for cgraph. 
+
+            all_orders - stores the dfs ordering fore ach complex in the batch set by the offset.
+
         """
         mol_batch_metal_map = {}
         mol_tree_metal_map = {}
@@ -717,7 +723,7 @@ class MolGraphMetal(object):
         cgraph = torch.zeros(len(tree_batchG) + 1, max_cls_size).int()
 
         """
-        Corresponding to each node in the tree (i.e. motif), we store the corresponding atoms of that motif in the graph as a cluster in cgraph. So cgraph is a tensor of size (number of motifs, max number of atoms in a motif). each cgraph entry consists of the atom indices of that cluster. 
+        Corresponding to each node in the tree (i.e. motif), we store the corresponding atoms of that motif in the graph as a cluster in cgraph. So cgraph is a tensor of size [(number of motifs, max number of atoms in a motif)]. each cgraph entry consists of the atom indices of that cluster. 
         """
         print("cgraph")
         root_scope_iter=0
@@ -897,6 +903,8 @@ class MolGraphMetal(object):
             #& 7. for the scope of this complex, update the length of the complex with complex_length now that all the ligands are processed and we have the total length of the molecule. 
 
             #& 8. append the complex_graph object to the all_G list.
+
+            #! One thing is missing is a motif with the iron node and its attached atom node? How else will the decoder know that it is a viable attachment point? or is it possible for the decoder to figure it out on itself. We are slightly changing our approach to align it with theirs now. We have modeled a complex as a full molecule at the tensor level. But there are a few gaps such as loops and the motif with the iron node and the attached atom node. We need to see how it goes.
         
 
         """
