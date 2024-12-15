@@ -96,6 +96,7 @@ class HierVAEMetalDist(nn.Module):
     z_log_var is the log of the variance of the latent space
     if perturb is True, then we add some noise to the latent space. The noise is sampled from a normal distribution.
     z_vecs is a sample from the latent space.
+    #!cross check kl loss. if there should be a minus sign. 
     """
     def rsample(self, z_vecs, W_mean, W_var, perturb=True): # this is the reparametrization trick
         batch_size = z_vecs.size(0)
