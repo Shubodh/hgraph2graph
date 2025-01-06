@@ -88,7 +88,16 @@ class HierMPNDecoderMetalDist(nn.Module):
         )
         self.W_assm = nn.Linear(hidden_size, latent_size)
 
-        self.W_dist=nn.Linear(hidden_size, 1) #! linear layer for distance prediction - try putting non-linearity here. 
+        # self.W_dist=nn.Linear(hidden_size, 1) #! linear layer for distance prediction - try putting non-linearity here. 
+        self.W_dist = nn.Sequential(
+                nn.Linear(hidden_size, 2 * hidden_size),  # First layer (expansion)
+                nn.ReLU(),
+
+                nn.Linear(2 * hidden_size, hidden_size),  # Second layer (compression)
+                nn.ReLU(),
+
+                nn.Linear(hidden_size, 1)  # Output layer (distance prediction)
+        )
 
         if latent_size != hidden_size:
             self.W_root = nn.Linear(latent_size, hidden_size)
@@ -359,8 +368,8 @@ class HierMPNDecoderMetalDist(nn.Module):
             all_cls_preds.append( (init_vecs[i], i, clab, ilab) ) #cluster prediction
             new_atoms.extend(root['cluster'])
         
-        print("new_atoms:",new_atoms)
-        print("tree_scope:",tree_scope)     
+        # print("new_atoms:",new_atoms)
+        # print("tree_scope:",tree_scope)     
         # exit()   
         # print("new_atoms:",new_atoms)
 
@@ -462,7 +471,7 @@ class HierMPNDecoderMetalDist(nn.Module):
                     mess_idx = tree_batch[xid][yid]['mess_idx']
                     new_atoms.extend( tree_batch.nodes[yid]['cluster'] ) #NOTE: regardless of tlab = 0 or 1
                     # distance prediction. 
-                    hmess = self.rnn_cell.get_hidden_state(hinter.mess)
+                    hmess = self.rnn_cell.get_hidden_state(htree.mess)
                     e_dist=self.W_dist(hmess[mess_idx])
                     all_dist_preds_tree.append(e_dist)
 
@@ -518,7 +527,7 @@ class HierMPNDecoderMetalDist(nn.Module):
         else:
             assm_loss, assm_acc = 0, 1
         
-        loss = (topo_loss + cls_loss + assm_loss) / batch_size
+        loss = (topo_loss + cls_loss + assm_loss + dist_loss) / batch_size
         return loss, cls_acc, icls_acc, topo_acc, assm_acc, dist_loss
 
     def enum_attach(self, hgraph, cands, icls, nth_child):

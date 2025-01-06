@@ -137,4 +137,4 @@ class HierVAEMetalDist(nn.Module):
         #     print("Error in decoder")
         #     print(e)
         #     return 0,0,0,0,0,0
-        return loss + beta * kl_div, kl_div.item(), wacc, iacc, tacc, sacc, dist_loss
+        return loss + 1 * kl_div, kl_div.item(), wacc, iacc, tacc, sacc, dist_loss

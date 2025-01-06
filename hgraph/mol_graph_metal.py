@@ -412,6 +412,9 @@ class MolGraphMetal(object):
             tree.nodes[i]['assm_cands'] = []
             tree.nodes[i]['coordinates'] = self.tree_motif_cords[i]
 
+            """
+            There is some sort of uncertainity in the assembly when the parent cluster is a ring and has more than 2 atoms. 
+            """
             if pa[i] >= 0 and len(self.clusters[ pa[i] ]) > 2: #uncertainty occurs in assembly
                 hist = [a for c in prev_sib[i] for a in self.clusters[c]] 
                 pa_cls = self.clusters[ pa[i] ]
@@ -919,7 +922,7 @@ class MolGraphMetal(object):
         trees_allorders=[]
 
         for complex_id, complex_name in enumerate(complexes_names_batch):
-            print(complex_name)
+            # print(complex_name)
             iron_coord=mol_ironcoord_map[complex_name] # modification for distance calculation
             graphs = mol_metal_map_batch[complex_name]
 
@@ -928,7 +931,7 @@ class MolGraphMetal(object):
             scope.append((offset, len(graphs)))
             # scope_allorders.append((offset, 1))
             iron_index = len(fnode)
-            print("iron_index: ",iron_index)
+            # print("iron_index: ",iron_index)
             fnode.append(vocab[iron_tuple])
             agraph.append([])
             complex_length=1
@@ -941,7 +944,7 @@ class MolGraphMetal(object):
                                        cluster=[0])#!
 
             for G in graphs:
-                print("ligand length : ",len(G))
+                # print("ligand length : ",len(G))
                 complex_length+=len(G)
                 offset = len(fnode)
                 scope_allorders.append((offset, len(G)))
@@ -1074,7 +1077,7 @@ class MolGraphMetal(object):
                         dfs_complex(order, pa, prev_sib, y, x)
                         order.append( (y,x,0) )
                 order,pa=[],{}
-                print(len(complex_graph))
+                # print(len(complex_graph))
                 prev_sib=[[] for i in range(len(complex_graph)+iron_index)]
                 dfs_complex(order,pa,prev_sib,iron_index,-1)
                 order.append((iron_index,None,0))
