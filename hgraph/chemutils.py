@@ -12,7 +12,7 @@ def set_atommap(mol, num=0):
         atom.SetAtomMapNum(num)
     return mol
 
-def get_mol(smiles):
+def get_mol(smiles): # sanitizing is being done here while retrieving the molecule object from smiles string.
     mol = Chem.MolFromSmiles(smiles)
     if mol is not None: Chem.Kekulize(mol, clearAromaticFlags=True)
     return mol
@@ -142,6 +142,17 @@ def get_clique_mol_new(mol,atoms,highlights):
 
 
 def get_assm_cands(mol, atoms, inter_label, cluster, inter_size):
+    """
+    mol : RDKit mol object
+    atoms : list of atom indices from previous siblings of the current cluster
+    inter_label : list of tuples of atom index and anchor_smiles of the inter cluster atoms
+    cluster : list of atom indices in the parent cluster
+    inter_size : number of atoms common between the current cluster and the parent cluster
+
+    the new clique mol which is created by default has the atom map numbers set to its atom indices in the full molecule + 1. atom_map stores the correct atom map numbers for the atoms in the new clique mol to its atom indices in the full molecule by using the idxfunc function.
+
+
+    """
     atoms = list(set(atoms))
     mol = get_clique_mol(mol, atoms)
     # if mol is None: # added for debugging. 
@@ -210,7 +221,7 @@ def get_inter_label_metal(mol,atoms,inter_atoms,highlight_atoms_ligand):
         for a in new_mol.GetAtoms():
             idx = idxfunc(a)
             if idx in inter_atoms and is_anchor(a, inter_atoms):
-                inter_label.append( (idx, get_anchor_smiles(new_mol, idx)) )
+                inter_label.append( (idx, get_anchor_smiles_metal(new_mol, idx, highlights=highlight_new_mol)) )
 
         for a in new_mol.GetAtoms():
             a.SetAtomMapNum( 1 if idxfunc(a) in inter_atoms else 0 )
@@ -224,6 +235,18 @@ def get_inter_label_metal(mol,atoms,inter_atoms,highlight_atoms_ligand):
     except:
         return None,inter_label
             
+def get_anchor_smiles_metal(mol, anchor, highlights, idxfunc=idxfunc):
+    copy_mol = Chem.Mol(mol)
+    for a in copy_mol.GetAtoms():
+        if a.GetIdx() in highlights:
+            a.SetAtomMapNum(2)
+        else:
+            idx = idxfunc(a)
+            if idx == anchor: a.SetAtomMapNum(1)
+            else: a.SetAtomMapNum(0)
+
+    return get_smiles(copy_mol)
+
 def get_anchor_smiles(mol, anchor, idxfunc=idxfunc):
     copy_mol = Chem.Mol(mol)
     for a in copy_mol.GetAtoms():
