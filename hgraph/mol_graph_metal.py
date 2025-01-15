@@ -42,7 +42,7 @@ class MolGraphMetal(object):
             # print("Number of clusters: ", len(self.clusters))
             # print("atom_cls: ", self.atom_cls)
             # print("building tree")
-            self.mol_tree, self.tree_motif_cords=self.tree_decomp_dist()
+            self.mol_tree, self.tree_motif_cords, self.flagged_motifs=self.tree_decomp_dist()
             # print("number of nodes: ", len(self.mol_tree.nodes))
             # print("number of edges: ", len(self.mol_tree.edges))
             self.order=self.label_tree_dist()
@@ -209,6 +209,11 @@ class MolGraphMetal(object):
 
     def tree_decomp_dist(self):
         clusters_tree = self.clusters
+        print("clusters before tree decomposition")
+        print(clusters_tree)
+        highlight_atoms=self.highlight
+        flagged_motifs = []
+        flagged_atoms = []
 
         clusters_xyz=self.clusters_xyz
         tree_motif_cords = [None] * len(clusters_tree)
@@ -216,9 +221,21 @@ class MolGraphMetal(object):
         graph=nx.Graph()
         for i in range(len(clusters_tree)):
             graph.add_node(i)
+
+            count=0
+            for idx, atom in enumerate(clusters_tree[i]):
+                if atom in highlight_atoms:
+                    count+=1
+            if count>0 and len(clusters_tree[i])>2:
+                flagged_motifs.append(i)
+                flagged_atoms.extend(clusters_tree[i])
         
         for atom, nei_cls in enumerate(self.atom_cls):
             if len(nei_cls) <= 1: 
+                if atom in highlight_atoms and atom not in flagged_atoms:
+                    flagged_atoms.append(atom)
+                    flagged_motifs.append(nei_cls[0])
+                
                 if tree_motif_cords[nei_cls[0]] is None:
                     avg_c1 = np.mean(np.array(clusters_xyz[nei_cls[0]]), axis=0)
                     tree_motif_cords[nei_cls[0]]=avg_c1
@@ -232,6 +249,9 @@ class MolGraphMetal(object):
                 c2 = len(clusters_tree)-1
                 tree_motif_cords.append(None)
                 graph.add_node(c2)
+                if atom in highlight_atoms and atom not in flagged_atoms:
+                    flagged_atoms.append(atom)
+                    flagged_motifs.append(c2)
                 for c1 in nei_cls:
                     if clusters_xyz is not None:
                         avg_c1 = np.mean(np.array(clusters_xyz[c1]), axis=0) 
@@ -251,6 +271,9 @@ class MolGraphMetal(object):
                 c2 = len(clusters_tree)-1
                 tree_motif_cords.append(None)
                 graph.add_node(c2)
+                if atom in highlight_atoms and atom not in flagged_atoms:
+                    flagged_atoms.append(atom)
+                    flagged_motifs.append(c2)
                 for c1 in nei_cls:
                     if clusters_xyz is not None:
                         avg_c1 = np.mean(np.array(clusters_xyz[c1]), axis=0) 
@@ -291,7 +314,8 @@ class MolGraphMetal(object):
             mst=graph
         else:
             mst=nx.maximum_spanning_tree(graph) #must be connected
-        return mst, tree_motif_cords
+        assert sorted(flagged_atoms) == sorted(highlight_atoms)
+        return mst, tree_motif_cords, flagged_motifs
 
     def label_tree(self):
         def dfs(order, pa, prev_sib, x, fa):
@@ -688,6 +712,7 @@ class MolGraphMetal(object):
         mol_batch_metal_map = {}
         mol_tree_metal_map = {}
         mol_graph_metal_map = {}
+        mol_flagged_motifs_metal_map = {}
         mol_ironcoord_map = {}
         print(complexes_names_batch)
         # print(len(complexes_ligands))
@@ -706,13 +731,14 @@ class MolGraphMetal(object):
             #     print(f"ligand {i} length: ",len(x.mol_graph.nodes))
             mol_tree_metal_map[complex] = [x.mol_tree for x in mol_batch_metal_map[complex]]
             mol_graph_metal_map[complex] = [x.mol_graph for x in mol_batch_metal_map[complex]]
+            mol_flagged_motifs_metal_map[complex]=[x.flagged_motifs for x in mol_batch_metal_map[complex]]
         
         print("tree tensors")
-        tree_tensors,tree_batchG,treescope_allorders,all_orders =MolGraphMetal.tensorize_graph_metal_dist(complexes_names_batch, mol_tree_metal_map, vocab, mol_ironcoord_map=mol_ironcoord_map)
-        print(len(tree_batchG))
+        tree_tensors,tree_batchG,treescope_allorders,all_orders =MolGraphMetal.tensorize_graph_metal_dist(complexes_names_batch, mol_flagged_motifs_metal_map, mol_tree_metal_map, vocab, mol_ironcoord_map=mol_ironcoord_map)
+        print("Number of nodes in the tree ",len(tree_batchG))
         print("graph tensors")
-        graph_tensors, graph_batchG,graphscope_allorders = MolGraphMetal.tensorize_graph_metal_dist(complexes_names_batch, mol_graph_metal_map, avocab, mol_ironcoord_map,('Fe',0), use_highlights=True)
-        print(len(graph_batchG))
+        graph_tensors, graph_batchG,graphscope_allorders = MolGraphMetal.tensorize_graph_metal_dist(complexes_names_batch, mol_flagged_motifs_metal_map, mol_graph_metal_map, avocab, mol_ironcoord_map,('Fe',0), use_highlights=True)
+        print("Number of nodes in the graph ",len(graph_batchG))
 
         print("length of all orders: ",len(all_orders))
         print("all_orders for the first complex: ",all_orders[0])
@@ -734,20 +760,20 @@ class MolGraphMetal(object):
             if attr['batch_id'] is not None:
                 bid = attr['batch_id']
                 offset = graphscope_allorders[bid][0]
-                print("offset: ",offset)
+                # print("offset: ",offset)
                 tree_batchG.nodes[v]['inter_label'] = inter_label = [(x + offset, y) for x,y in attr['inter_label']]
                 tree_batchG.nodes[v]['cluster'] = cls = [x +offset for x in attr['cluster']]
                 tree_batchG.nodes[v]['assm_cands'] = [add(x, offset) for x in attr['assm_cands']]
                 cgraph[v, :len(cls)] = torch.IntTensor(cls)
-                print(cls)
+                # print(cls)
             else:
                 offset = graph_scope[root_scope_iter][0]
-                print("offset root: ",offset)
+                # print("offset root: ",offset)
                 tree_batchG.nodes[v]['cluster']=cls=[x + offset for x in attr['cluster']]
                 tree_batchG.nodes[v]['assm_cands']=[add(x, offset) for x in attr['assm_cands']]
                 cgraph[v,:len(cls)]=torch.IntTensor(cls)
                 root_scope_iter+=1
-                print(cls)
+                # print(cls)
         
         # all_orders = []
         # i = 0
@@ -768,6 +794,7 @@ class MolGraphMetal(object):
         #         i += 1
         #     all_orders.append(cumulative_order)  # Append accumulated order for the entire mol_list
 
+        print(all_orders)
 
         tree_tensors = tree_tensors[:4] + (cgraph, tree_scope)
 
@@ -859,7 +886,7 @@ class MolGraphMetal(object):
     #     tree_tensors = tree_tensors[:4] + (cgraph, tree_scope)
     #     return (tree_batchG, graph_batchG), (tree_tensors, graph_tensors), all_orders
     
-    def tensorize_graph_metal_dist(complexes_names_batch, mol_metal_map_batch, vocab, mol_ironcoord_map, iron_tuple=('Fe', 'Fe:2'), use_highlights=False):
+    def tensorize_graph_metal_dist(complexes_names_batch, mol_flagged_motifs_metal_map, mol_metal_map_batch, vocab, mol_ironcoord_map, iron_tuple=('Fe', 'Fe:2'), use_highlights=False):
         """
         fnode - unique node indices correspondning to the vocabulary of the motifs and atoms in the graph.
 
@@ -922,9 +949,10 @@ class MolGraphMetal(object):
         trees_allorders=[]
 
         for complex_id, complex_name in enumerate(complexes_names_batch):
-            # print(complex_name)
+            print(complex_name)
             iron_coord=mol_ironcoord_map[complex_name] # modification for distance calculation
             graphs = mol_metal_map_batch[complex_name]
+            complex_flagged_motifs = mol_flagged_motifs_metal_map[complex_name]
 
 
             offset = len(fnode)
@@ -943,12 +971,14 @@ class MolGraphMetal(object):
                 complex_graph.add_node(iron_index, ismiles='Fe:2', smiles='Fe', coordinates=iron_coord, label=iron_tuple, assm_cands=[], batch_id=None, inter_label=None,
                                        cluster=[0])#!
 
-            for G in graphs:
-                # print("ligand length : ",len(G))
+            for G,flagged_motifs in zip(graphs,complex_flagged_motifs):
+                print("ligand length : ",len(G))
                 complex_length+=len(G)
                 offset = len(fnode)
                 scope_allorders.append((offset, len(G)))
                 G = nx.convert_node_labels_to_integers(G, first_label=offset)
+                flagged_motifs = [v + offset for v in flagged_motifs]
+
                 # all_G.append(G) #!
                 fnode.extend([None for v in G.nodes])
 
@@ -989,13 +1019,14 @@ class MolGraphMetal(object):
                             complex_graph[v][iron_index]['mess_idx'] = eid
                             agraph[iron_index].append(eid)
                             bgraph.append([])
-                            break #! we are breaking to avoid formation of loops as seen in the example of FRMFTE10 ring.
+                            # break #! we are breaking to avoid formation of loops as seen in the example of FRMFTE10 ring.
 
                 else:
 
                     for v, attr in G.nodes(data=True):
-                        label_attr=attr['label']
-                        if ':2' in label_attr[1]:  # Check if the ismiles label contains ':2'
+                        # label_attr=attr['label']
+                        # if ':2' in label_attr[1]:  # Check if the ismiles label contains ':2'
+                        if v in flagged_motifs:
                             coords=attr['coordinates']
                             dist=np.linalg.norm(np.array(iron_coord)-np.array(coords))
 
@@ -1013,7 +1044,7 @@ class MolGraphMetal(object):
                             complex_graph[v][iron_index]['mess_idx'] = eid
                             agraph[iron_index].append(eid)
                             bgraph.append([])
-                            break #! we are breaking to avoid formation of loops as seen in the example of FRMFTE10 ring. 
+                            # break #! we are breaking to avoid formation of loops as seen in the example of FRMFTE10 ring. 
                             
                             
                 """
@@ -1061,10 +1092,11 @@ class MolGraphMetal(object):
 
             all_G.append(complex_graph) #!
             if use_highlights==False:
-                def dfs_complex(order,pa,prev_sib,x,fa):
+                def dfs_complex(order,pa,prev_sib,x,fa,visited):
+                    visited.add(x)             
                     pa[x]=fa
                     if x in complex_graph:
-                        sorted_child = sorted([ y for y in complex_graph[x] if y != fa ])
+                        sorted_child = sorted([ y for y in complex_graph[x] if y != fa and y not in visited])
                     else:
                         raise Exception("Node not found in complex graph")
                     
@@ -1074,15 +1106,16 @@ class MolGraphMetal(object):
                         prev_sib[y] = sorted_child[:idx] 
                         prev_sib[y] += [x, fa] if fa >= 0 else [x]
                         order.append( (x,y,1) )
-                        dfs_complex(order, pa, prev_sib, y, x)
+                        dfs_complex(order, pa, prev_sib, y, x,visited)
                         order.append( (y,x,0) )
                 order,pa=[],{}
+                visited=set()
                 # print(len(complex_graph))
                 prev_sib=[[] for i in range(len(complex_graph)+iron_index)]
-                dfs_complex(order,pa,prev_sib,iron_index,-1)
+                dfs_complex(order,pa,prev_sib,iron_index,-1,visited)
                 order.append((iron_index,None,0))
                 trees_allorders.append(order)
-
+                # print(order)
 
         fnode[0] = fnode[1]  # Set the first node to the iron node
         fnode = torch.IntTensor(fnode)
