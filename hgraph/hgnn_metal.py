@@ -85,6 +85,7 @@ class HierVAEMetalDist(nn.Module):
         self.encoder = HierMPNEncoderMetalDist(args.vocab, args.atom_vocab, args.rnn_type, args.embed_size, args.hidden_size, args.depthT, args.depthG, args.dropout)
         self.decoder=HierMPNDecoderMetalDist(args.vocab, args.atom_vocab, args.rnn_type, args.embed_size, args.hidden_size, args.latent_size, args.diterT, args.diterG, args.dropout)
         self.encoder.tie_embedding(self.decoder.hmpn)
+        self.encoder.tie_embedding(self.decoder.hmpn_distances)
         self.latent_size = args.latent_size
 
 
@@ -120,7 +121,7 @@ class HierVAEMetalDist(nn.Module):
         root_vecs, root_kl = self.rsample(root_vecs, self.R_mean, self.R_var, perturb=False)
         return self.decoder.decode((root_vecs, root_vecs, root_vecs), greedy=True, max_decode_step=150)
     
-    def forward(self, graphs, tensors, orders, beta, perturb_z=True):
+    def forward(self, graphs, tensors, orders, beta, epoch_no, perturb_z=True):
         tree_tensors, graph_tensors = tensors = make_cpu_dist(tensors)
 
         root_vecs, tree_vecs, _, graph_vecs = self.encoder(tree_tensors, graph_tensors)
@@ -132,9 +133,9 @@ class HierVAEMetalDist(nn.Module):
         # print("encoding: ",root_vecs)
 
         # try:
-        loss,wacc,iacc,tacc,sacc,dist_loss = self.decoder((root_vecs, root_vecs, root_vecs), graphs, tensors, orders)
+        loss,wacc,iacc,tacc,sacc,dist_loss, dist_loss_tree = self.decoder((root_vecs, root_vecs, root_vecs), graphs, tensors, orders, epoch_no)
         # except Exception as e:
         #     print("Error in decoder")
         #     print(e)
         #     return 0,0,0,0,0,0
-        return loss + 1 * kl_div, kl_div.item(), wacc, iacc, tacc, sacc, dist_loss
+        return loss + 1 * kl_div, kl_div.item(), wacc, iacc, tacc, sacc, dist_loss, dist_loss_tree
