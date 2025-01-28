@@ -100,13 +100,13 @@ batch = pickle.load(open("data/small_3_tensor/small_3_dist.pkl", "rb"))
 # print(len(batch))
 meters=np.zeros(6)
 
-for epoch in range(20):
+for epoch in range(50):
     model.zero_grad()
-    loss, kl_div, wacc, iacc, tacc, sacc, dist_loss = model(*batch, beta=beta)
+    loss, kl_div, wacc, iacc, tacc, sacc, dist_loss, dist_loss_tree = model(*batch, beta=beta, epoch_no=epoch)
     loss.backward()
     nn.utils.clip_grad_norm_(model.parameters(), args.clip_norm)
     optimizer.step()
-    print(f"Loss: {loss:.4f} | KL Div: {kl_div:.4f} | Wacc: {wacc:.4f} | Iacc: {iacc:.4f} | Tacc: {tacc:.4f} | Sacc: {sacc:.4f} | dist_loss: {dist_loss:.4f}")
+    print(f"Loss: {loss:.4f} | KL Div: {kl_div:.4f} | Wacc: {wacc:.4f} | Iacc: {iacc:.4f} | Tacc: {tacc:.4f} | Sacc: {sacc:.4f} | dist_loss: {dist_loss:.4f} | dist_loss_tree: {dist_loss_tree:.4f}")
 # for epoch in range(args.epoch):
 #     dataset = DataFolder(args.train, args.batch_size)
 
