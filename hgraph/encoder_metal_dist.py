@@ -412,8 +412,11 @@ class IncHierMPNEncoderMetalDist(HierMPNEncoderMetalDist):
         num_graph_nodes = graph_tensors[0].size(0)
 
         if len(subgraph[0]) + len(subgraph[1]) > 0:
+            # print("Subgraph ",subgraph)
             sub_graph_tensors = self.get_sub_tensor(graph_tensors, subgraph)[:-1] #graph tensor is already embedded
+            # print(sub_graph_tensors)
             hgraph.node, hgraph.mess = self.graph_encoder(sub_graph_tensors, hgraph.mess, num_graph_nodes, subgraph)
+            # print(hgraph.mess)
 
         if len(subtree[0]) + len(subtree[1]) > 0:
             sub_inter_tensors = self.embed_sub_tree(inter_tensors, hgraph.node, subtree, is_inter_layer=True)
@@ -423,4 +426,50 @@ class IncHierMPNEncoderMetalDist(HierMPNEncoderMetalDist):
             htree.node, htree.mess = self.tree_encoder(sub_tree_tensors, htree.mess, num_tree_nodes, subtree)
 
         return htree, hinter, hgraph
+    
+class IncHierMPNEncoderMetalDist_DistancePrediction(HierMPNEncoderMetalDist):
+
+    def __init__(self, vocab, avocab, rnn_type, embed_size, hidden_size, depthT, depthG, dropout):
+        super(IncHierMPNEncoderMetalDist_DistancePrediction, self).__init__(vocab, avocab, rnn_type, embed_size, hidden_size, depthT, depthG, dropout)
+        """
+        Added +1 for the new distance dimension in the embeddings.
+        """
+        self.graph_encoder = IncMPNEncoderDist(rnn_type, self.atom_size + self.bond_size + 1, self.atom_size, hidden_size, depthG, dropout)
+        del self.W_root
+
+    def get_sub_tensor(self, tensors, subset):
+        """
+        fnode, fmess, agraph, bgraph, cgraph (for tree) are selected based on the subset of nodes and edges present in the subgraph and returned.
+        """
+        subnode, submess = subset
+        fnode, fmess, agraph, bgraph = tensors[:4]
+        fnode, fmess = fnode.index_select(0, subnode), fmess.index_select(0, submess)
+        agraph, bgraph = agraph.index_select(0, subnode), bgraph.index_select(0, submess)
+
+        if len(tensors) == 6:
+            cgraph = tensors[4].index_select(0, subnode)
+            return fnode, fmess, agraph, bgraph, cgraph, tensors[-1]
+        else:
+            return fnode, fmess, agraph, bgraph, tensors[-1]
+
+    def forward(self, graph_tensors, hgraph, subgraph):
+        """
+        num_tree_nodes - number of nodes in the tree (motifs)
+        num_graph_nodes - number of nodes in the graph (atoms)
+
+        subgraph[0] - node ids in the subgraph
+        subgraph[1] - edge ids in the subgraph
+
+        """
+        num_graph_nodes = graph_tensors[0].size(0)
+
+        if len(subgraph[0]) + len(subgraph[1]) > 0:
+            # print("Subgraph ",subgraph)
+            sub_graph_tensors = self.get_sub_tensor(graph_tensors, subgraph)[:-1] #graph tensor is already embedded
+            # print(sub_graph_tensors)
+            hgraph.node, hgraph.mess = self.graph_encoder(sub_graph_tensors, hgraph.mess, num_graph_nodes, subgraph)
+            # print(hgraph.mess)
+
+        return hgraph
+
     
