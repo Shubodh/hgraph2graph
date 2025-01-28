@@ -71,6 +71,18 @@ def index_scatter(sub_data, all_data, index):
     return all_data * mask.unsqueeze(-1) + buf
 
 def hier_topk(cls_scores, icls_scores, vocab, topk):
+    """
+    designed to compute the top k heirarchical predictions based on cls and icls scores for a batch of data.
+
+    the raw logits of cls_scores are first converted to log probabilities, and the top k classes are selected. cls_scores.topk(topk, dim=-1) selects the top k highest scores and their corresponding indices for each sample in the batch.
+
+    A loop iterates over the topk main class predictions (cls_topk).
+    clab (shape (batch_size,)): Indices of the current main class being considered for all samples in the batch.
+    vocab.get_mask(clab) retrieves a mask (shape (batch_size, num_subclasses)) that specifies valid sub-classes for each main class (clab). mask is added to icls_scores, where the mask invalidates certain sub-classes by assigning them a negative value of 1000. 
+
+    then combine the log probabilities of the main class and the sub-classes to get the top k predictions.
+
+    """
     batch_size = len(cls_scores)
     cls_scores = F.log_softmax(cls_scores, dim=-1)
     cls_scores_topk, cls_topk = cls_scores.topk(topk, dim=-1)
