@@ -58,7 +58,7 @@ class MolGraphMetal(object):
             self.mol, self.highlight=self.renumber_molecule(mol,highlight_atoms)
             self.mol_graph = self.build_mol_graph()
             self.clusters, self.atom_cls = self.find_clusters()
-            self.mol_tree = self.tree_decomp()
+            self.mol_tree, self.flagged_motifs = self.tree_decomp()
             self.order = self.label_tree()
 
         # if xyz_block is not None:
@@ -171,11 +171,29 @@ class MolGraphMetal(object):
     def tree_decomp(self):
         clusters_tree = self.clusters
         graph=nx.Graph()
+        highlight_atoms=self.highlight
+        flagged_motifs = []
+        flagged_atoms = []
+
         for i in range(len(clusters_tree)):
             graph.add_node(i)
+
+            count=0
+            for idx, atom in enumerate(clusters_tree[i]):
+                if atom in highlight_atoms:
+                    count+=1
+            if count>0 and len(clusters_tree[i])>2:
+                flagged_motifs.append(i)
+                flagged_atoms.extend(clusters_tree[i])
         
         for atom, nei_cls in enumerate(self.atom_cls):
-            if len(nei_cls) <= 1: continue
+
+            if len(nei_cls) <= 1: 
+                if atom in highlight_atoms and atom not in flagged_atoms:
+                    flagged_atoms.append(atom)
+                    flagged_motifs.append(nei_cls[0])
+                continue
+
             bonds = [c for c in nei_cls if len(clusters_tree[c]) == 2]
             rings = [c for c in nei_cls if len(clusters_tree[c]) > 4]
 
@@ -183,6 +201,9 @@ class MolGraphMetal(object):
                 clusters_tree.append([atom])
                 c2 = len(clusters_tree)-1
                 graph.add_node(c2)
+                if atom in highlight_atoms and atom not in flagged_atoms:
+                    flagged_atoms.append(atom)
+                    flagged_motifs.append(c2)
                 for c1 in nei_cls:
                     graph.add_edge(c1, c2, weight = 100)
 
@@ -190,6 +211,9 @@ class MolGraphMetal(object):
                 clusters_tree.append([atom]) #temporary value, need to change
                 c2 = len(clusters_tree)-1
                 graph.add_node(c2)
+                if atom in highlight_atoms and atom not in flagged_atoms:
+                    flagged_atoms.append(atom)
+                    flagged_motifs.append(c2)
                 for c1 in nei_cls:
                     graph.add_edge(c1, c2, weight = 100)
             else:
@@ -204,7 +228,8 @@ class MolGraphMetal(object):
             mst=graph
         else:
             mst=nx.maximum_spanning_tree(graph) #must be connected
-        return mst
+        assert sorted(flagged_atoms) == sorted(highlight_atoms)
+        return mst, flagged_motifs
 
 
     def tree_decomp_dist(self):
@@ -222,6 +247,9 @@ class MolGraphMetal(object):
         for i in range(len(clusters_tree)):
             graph.add_node(i)
 
+            """
+            These are for the ring motifs. If the motif has more than 2 atoms and contains any highlighted atoms, then that is a ring motif with all of its atoms connected to the metal centre so then it is a flagged motif.
+            """
             count=0
             for idx, atom in enumerate(clusters_tree[i]):
                 if atom in highlight_atoms:
@@ -592,7 +620,7 @@ class MolGraphMetal(object):
         tree_tensors = tree_tensors[:4] + (cgraph, tree_scope)
         return (tree_batchG, graph_batchG), (tree_tensors, graph_tensors), all_orders
     
-    def tensorize_graph_metal(complexes_names_batch, mol_metal_map_batch, vocab, iron_tuple=('Fe', 'Fe:2'), use_highlights=False):
+    def tensorize_graph_metal(complexes_names_batch, mol_metal_map_batch, vocab, iron_tuple=('[Fe]', '[Fe:2]'), use_highlights=False):
         fnode, fmess = [None], [(0, 0, 0, 0)]
         agraph, bgraph = [[]], [[]]
         scope = []
@@ -717,10 +745,13 @@ class MolGraphMetal(object):
         print(complexes_names_batch)
         # print(len(complexes_ligands))
 
+        complex_ligand_count = []
+
         for idx, complex in enumerate(complexes_names_batch):
             print(complex)
             ligands_set = complexes_ligands[complex]
             print(f"number of ligands in complex: ",len(ligands_set))
+            complex_ligand_count.append(len(ligands_set))
             ligands_highlights = complexes_highlights[complex]
             ligands_block = complexes_ligandblock[complex]
             iron_coord=complexes_iron_coord[complex] # modification for distance calculation
@@ -798,7 +829,7 @@ class MolGraphMetal(object):
 
         tree_tensors = tree_tensors[:4] + (cgraph, tree_scope)
 
-        return (tree_batchG, graph_batchG), (tree_tensors, graph_tensors), all_orders
+        return (tree_batchG, graph_batchG), (tree_tensors, graph_tensors), all_orders, complex_ligand_count
 
     # def tensorize_metal_dist(complexes_names_batch, complexes_ligands, complexes_highlights, complexes_ligandblock, complexes_iron_coord, vocab, avocab):
     #     """
@@ -886,7 +917,7 @@ class MolGraphMetal(object):
     #     tree_tensors = tree_tensors[:4] + (cgraph, tree_scope)
     #     return (tree_batchG, graph_batchG), (tree_tensors, graph_tensors), all_orders
     
-    def tensorize_graph_metal_dist(complexes_names_batch, mol_flagged_motifs_metal_map, mol_metal_map_batch, vocab, mol_ironcoord_map, iron_tuple=('Fe', 'Fe:2'), use_highlights=False):
+    def tensorize_graph_metal_dist(complexes_names_batch, mol_flagged_motifs_metal_map, mol_metal_map_batch, vocab, mol_ironcoord_map, iron_tuple=('[Fe]', '[Fe:2]'), use_highlights=False):
         """
         fnode - unique node indices correspondning to the vocabulary of the motifs and atoms in the graph.
 
@@ -951,7 +982,7 @@ class MolGraphMetal(object):
         for complex_id, complex_name in enumerate(complexes_names_batch):
             print(complex_name)
             iron_coord=mol_ironcoord_map[complex_name] # modification for distance calculation
-            graphs = mol_metal_map_batch[complex_name]
+            graphs = mol_metal_map_batch[complex_name] # graphs are the ligands of this particular complex. 
             complex_flagged_motifs = mol_flagged_motifs_metal_map[complex_name]
 
 
@@ -968,7 +999,7 @@ class MolGraphMetal(object):
             if use_highlights:
                 complex_graph.add_node(iron_index, coordinates=iron_coord, label=('Fe',0), highlight=None, batch_id=None)#!
             else:
-                complex_graph.add_node(iron_index, ismiles='Fe:2', smiles='Fe', coordinates=iron_coord, label=iron_tuple, assm_cands=[], batch_id=None, inter_label=None,
+                complex_graph.add_node(iron_index, ismiles='[Fe:2]', smiles='[Fe]', coordinates=iron_coord, label=iron_tuple, assm_cands=[], batch_id=None, inter_label=None,
                                        cluster=[0])#!
 
             for G,flagged_motifs in zip(graphs,complex_flagged_motifs):
