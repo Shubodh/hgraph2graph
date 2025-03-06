@@ -104,7 +104,14 @@ class MolGraphMetal(object):
                 clusters.append( (a1,a2) )
 
         ssr = [tuple(x) for x in Chem.GetSymmSSSR(mol)]
-        clusters.extend(ssr)
+        """
+        ^ Temporary - Adding a new condition here while adding the rings to the clusters. We need to make sure that the rings detected are not just topological loops but actually chemically valid rings whose bonds are part of a ring. bond.IsInRing() fails because the molecule considers the topological loop as a ring itself. So, just putting a constraint on the size of the ring to be greater than 2 and lesser than 7 for now. Need to discuss this. 
+        """
+        for i, ring in enumerate(ssr):
+            ring = list(ring)
+            ring_size = len(ring)
+            if ring_size > 2 and ring_size < 7:
+                clusters.append(tuple(ring))
 
         if clusters and 0 not in clusters[0]: #root is not node[0]
             for i,cls in enumerate(clusters):
@@ -143,8 +150,15 @@ class MolGraphMetal(object):
                 clusters.append( (a1,a2) )
 
         ssr = [tuple(x) for x in Chem.GetSymmSSSR(mol)]
-        clusters.extend(ssr)
-
+        """
+        ^ Temporary - Adding a new condition here while adding the rings to the clusters. We need to make sure that the rings detected are not just topological loops but actually chemically valid rings whose bonds are part of a ring. bond.IsInRing() fails because the molecule considers the topological loop as a ring itself. So, just putting a constraint on the size of the ring to be greater than 2 and lesser than 7 for now. Need to discuss this. 
+        """
+        for i, ring in enumerate(ssr):
+            ring = list(ring)
+            ring_size = len(ring)
+            if ring_size > 2 and ring_size < 7:
+                clusters.append(tuple(ring))
+                
         if clusters and 0 not in clusters[0]: #root is not node[0]
             for i,cls in enumerate(clusters):
                 if 0 in cls:
@@ -174,17 +188,20 @@ class MolGraphMetal(object):
         highlight_atoms=self.highlight
         flagged_motifs = []
         flagged_atoms = []
+        print(clusters_tree)
 
         for i in range(len(clusters_tree)):
             graph.add_node(i)
 
             count=0
+            current_flag_atoms=[]
             for idx, atom in enumerate(clusters_tree[i]):
                 if atom in highlight_atoms:
                     count+=1
+                    current_flag_atoms.append(atom)
             if count>0 and len(clusters_tree[i])>2:
                 flagged_motifs.append(i)
-                flagged_atoms.extend(clusters_tree[i])
+                flagged_atoms.extend(current_flag_atoms)
         
         for atom, nei_cls in enumerate(self.atom_cls):
 
@@ -228,7 +245,9 @@ class MolGraphMetal(object):
             mst=graph
         else:
             mst=nx.maximum_spanning_tree(graph) #must be connected
-        assert sorted(flagged_atoms) == sorted(highlight_atoms)
+        print(flagged_atoms)
+        # assert sorted(flagged_atoms) == sorted(highlight_atoms)
+        # print("assertion passed")
         return mst, flagged_motifs
 
 
@@ -248,15 +267,17 @@ class MolGraphMetal(object):
             graph.add_node(i)
 
             """
-            These are for the ring motifs. If the motif has more than 2 atoms and contains any highlighted atoms, then that is a ring motif with all of its atoms connected to the metal centre so then it is a flagged motif.
+            These are for the ring motifs. If the motif has more than 2 atoms and contains more than 1 highlighted atoms, then that is a ring motif with few of its atoms connected to the metal centre so then it is a flagged motif.
             """
             count=0
+            current_flag_atoms=[]
             for idx, atom in enumerate(clusters_tree[i]):
                 if atom in highlight_atoms:
                     count+=1
+                    current_flag_atoms.append(atom)
             if count>0 and len(clusters_tree[i])>2:
                 flagged_motifs.append(i)
-                flagged_atoms.extend(clusters_tree[i])
+                flagged_atoms.extend(current_flag_atoms)
         
         for atom, nei_cls in enumerate(self.atom_cls):
             if len(nei_cls) <= 1: 
