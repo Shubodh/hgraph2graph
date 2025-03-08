@@ -273,6 +273,19 @@ class HierMPNDecoder(nn.Module):
         return loss, cls_acc, icls_acc, topo_acc, assm_acc
 
     def enum_attach(self, hgraph, cands, icls, nth_child):
+        """ 
+        This function ensures that attachment candidates are properly encoded for scoring.
+
+        cands : list of atom pairs
+        icls : list of 2 inter cluster labels of the 2 anchor atoms
+        nth_child : the nth child of the parent cluster
+
+        icls_vecs : the embeddings of the inter cluster labels
+        order_vecs : the embeddings of the nth child
+        cand_vecs : the embeddings of the attachment candidates
+
+        the concatenated embeddings are passed through a matchNN. The output is then summed over the two attachment candidates and returned. 
+        """
         cands = self.itensor.new_tensor(cands)
         icls_vecs = self.itensor.new_tensor(icls * len(cands))
         icls_vecs = self.E_assm( icls_vecs )
@@ -289,6 +302,14 @@ class HierMPNDecoder(nn.Module):
         return cand_vecs
 
     def decode(self, src_mol_vecs, greedy=True, max_decode_step=100, beam=5):
+        """
+        src_mol_vecs - random vectors of latent_size of size equal to batch_size
+        batch_size - number of molecules to generate
+        tree_batch - IncTree object - tree representation of the molecule, it is an empty graph initially
+        graph_batch - IncGraph object - graph representation of the molecule, it is an empty graph initially
+
+        The initial root clusters are retrieved using get_cls_score and choosing the max probability of the cluster. This is done for each molecule in the batch_size.
+        """
         src_root_vecs, src_tree_vecs, src_graph_vecs = src_mol_vecs
         batch_size = len(src_root_vecs)
 
@@ -303,7 +324,13 @@ class HierMPNDecoder(nn.Module):
         icls_scores = icls_scores + self.vocab.get_mask(root_cls)
         root_cls, root_icls = root_cls.tolist(), icls_scores.max(dim=-1)[1].tolist()
 
-        super_root = tree_batch.add_node() 
+        """
+        This super root is the root of the tree_batch. It is the parent of all the root nodes of the molecules in the batch.
+        
+        The loop below creates the root nodes of the molecules in the batch and adds them to the tree_batch. Also adds an edge to the super_root. The motif added to the tree_batch is taken and its smiles is retrieved from the vocabulary that we previously created. The mol object from that smiles is created and then the individual atoms and bonds are added to the graph_batch. 
+
+        """
+        super_root = tree_batch.add_node()
         for bid in range(batch_size):
             clab, ilab = root_cls[bid], root_icls[bid]
             root_idx = tree_batch.add_node( batch_idx.new_tensor([clab, ilab]) )
@@ -325,8 +352,17 @@ class HierMPNDecoder(nn.Module):
         h[1 : batch_size + 1] = init_vecs #wiring root (only for tree, not inter)
         
         for t in range(max_decode_step):
+            """
+            The decoding step starts here. First off, we get the batch_list which is the list of molecules that have not been fully decoded. If the length of the batch_list is 0, we break out of the loop. We check for this by seeing if the length of the stack is greater than 0.
+            """
             batch_list = [ bid for bid in range(batch_size) if len(stack[bid]) > 0 ]
             if len(batch_list) == 0: break
+
+            """
+            Now, this part below is used to predict the next topological ordering for each molecule in the batch. It has two options - forward and backtrack. Forward is for when the molecule can be expanded and we need to predict the next motif. Backtrack is for when the molecule cannot be expanded and we need to backtrack to the previous node.
+
+            We take the current tree nodes, empty edges (since new ones have not been predicted yet) as subtree and the atoms and edges within motifs as subgraph. We then perform message passing on these subtrees and subgraphs. We then get the hidden state of the messages and use it to predict the next topological ordering. We then use this ordering to expand the molecule.
+            """
 
             batch_idx = batch_idx.new_tensor(batch_list)
             cur_tree_nodes = [stack[bid][-1] for bid in batch_list]
@@ -359,11 +395,17 @@ class HierMPNDecoder(nn.Module):
                         new_edge = tree_batch.add_edge(child, stack[bid][-1], edge_feature)
                         new_mess.append(new_edge)
 
+            """ 
+            Now, since we have the new node indices and the message indices of the new topological ordering. We use this to update subtree and then again perform message passing once again so that we can predict the actual motif that needs to be expanded.
+            """
             subtree = subtree[0], batch_idx.new_tensor(new_mess)
             subgraph = [], []
             htree, hinter, hgraph = self.hmpn(tree_tensors, tree_tensors, graph_tensors, htree, hinter, hgraph, subtree, subgraph)
             cur_mess = self.rnn_cell.get_hidden_state(htree.mess).index_select(0, subtree[1])
 
+            """ 
+            What is being done here is for each new message index in the expand list, we extract the hidden state vector using cur_mess and then use this to predict cls and icls scores. We then use these scores to get the top_k scores to consider.  
+            """
             if len(expand_list) > 0:
                 idx_in_mess, expand_list = zip(*expand_list)
                 idx_in_mess = batch_idx.new_tensor( idx_in_mess )
@@ -375,6 +417,17 @@ class HierMPNDecoder(nn.Module):
                     scores = torch.exp(scores) #score is output of log_softmax
                     shuf_idx = torch.multinomial(scores, beam, replacement=True).tolist()
 
+            """
+            fa_node is the parent motif of the new_node whose motif is yet to be determined. 
+
+            Important part here is - fa_cluster, fa_used and ismiles along with get_assm_cands. 
+
+            fa_cluster - the atoms present in the parent cluster of the new node. 
+            fa_used - the atoms that have already been used in the parent cluster.
+            ismiles - the ismiles of the motif that needs to be expanded.
+
+            here inter_cands is the list of possible attachment candidates in the parent cluster. anchor_smiles and attach_points are part of the new possible motif. 
+            """
             for i,bid in enumerate(expand_list):
                 new_node, fa_node = stack[bid][-1], stack[bid][-2]
                 success = False
@@ -403,6 +456,11 @@ class HierMPNDecoder(nn.Module):
                         assm_scores = self.get_assm_score(src_graph_vecs, batch_idx, cand_vecs).tolist()
                         sorted_cands = sorted( list(zip(inter_cands, assm_scores)), key = lambda x:x[1], reverse=True )
 
+                    """
+                    just to clarify again, inter_label consists of the possible candidate attachment points in the parent cluster while attach_points are the attachment points in the new motif. ismiles also corresponds to the new motif.
+
+                    here below, inter_label is modified to include the attachment points in the new motif.
+                    """
                     for inter_label,_ in sorted_cands:
                         inter_label = list(zip(inter_label, attach_points))
                         if graph_batch.try_add_mol(bid, ismiles, inter_label):

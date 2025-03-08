@@ -6,8 +6,18 @@ from hgraph.chemutils import *
 from collections import defaultdict
 
 class IncBase(object):
+    """
+    The IncBase class implements an incremental graph construction utility for managing directed graphs, node features, and edge features.    
+    """
 
     def __init__(self, batch_size, node_fdim, edge_fdim, max_nodes=100, max_edges=200, max_nb=12):
+        """
+        max_nb: maximum number of neighbors for each node
+        max_nodes: maximum number of nodes in the graph
+        max_edges: maximum number of edges in the graph
+        node_fdim: dimension of node features
+        edge_fdim: dimension of edge features
+        """
         self.max_nb = max_nb
         self.graph = nx.DiGraph()
         self.graph.add_node(0) #make sure node is 1 index
@@ -19,6 +29,9 @@ class IncBase(object):
         self.bgraph = self.fnode.new_zeros(max_edges * batch_size, max_nb)
 
     def add_node(self, feature=None):
+        """
+        Add a node to the graph with the given feature.
+        """
         idx = len(self.graph)
         self.graph.add_node(idx)
         if feature is not None:
@@ -29,9 +42,19 @@ class IncBase(object):
         self.fnode[idx, :len(feature)] = feature
 
     def can_expand(self, idx):
+        """
+        Checks if the node can have more edges/neighbors.
+        """
         return self.graph.in_degree(idx) < self.max_nb
 
     def add_edge(self, i, j, feature=None):
+        """
+        adds a directed edge from i to j and updates the edge feature.
+        updates agraph of the j node with this new edge index.
+        updates bgraph of this edge with the incoming edges to i (excluding from j).
+
+        updates the bgraph of the successor edges of j (excluding to i).
+        """
         if (i,j) in self.edge_dict: 
             return self.edge_dict[(i,j)]
 
@@ -114,6 +137,20 @@ class IncGraph(IncBase):
         return self.fnode, self.fmess, self.agraph, self.bgraph, None 
 
     def add_mol(self, batch_idx, smiles, inter_label, nth_child):
+        """
+        emol retrieves a kekulized mol object created from the smiles string. 
+
+        atom_map is a dictionary that maps the atom index of the emol object to the atom index of the mol object.
+
+        what is inter_label here?
+
+        for loop iterates over the atoms in emol. If the atom index is in inter_label, the atom index is added to new_atoms and attached. If the atom index is not in inter_label, a new atom is created with the atom map number set to batch_idx and added to the graph_batch. The atom index is added to new_atoms and to attached if the atom map number of that atom is >0 (in our case either 1 oe 2).
+
+        the second for loop iterates over the bonds in emol and adds the bond to the mol object if it does not already exist. The bond is also added to the graph_batch and the edge_dict. The edge feature is added to the graph_batch. If the bond already exists, the pair of atoms is added to the attached list.
+
+        these new_atoms, new_bonds, and attached lists are returned and used for the cgraph at the tree_batch. 
+        
+        """
         emol = get_mol(smiles)
         atom_map = {y : x for x,y in inter_label}
         new_atoms, new_bonds, attached = [], [], []
@@ -153,6 +190,11 @@ class IncGraph(IncBase):
 
     #validity check function
     def try_add_mol(self, batch_idx, smiles, inter_label):
+        """ 
+        it checks first if the corresponding atom in the mol object and the atom in the emol object are the same. If they are not the same, it returns False.
+
+        The remaining validity checks are pretty self explanatory. 
+        """
         emol = get_mol(smiles)
         for x,y in inter_label:
             if not atom_equal(self.mol.GetAtomWithIdx(x), emol.GetAtomWithIdx(y)):
@@ -194,12 +236,18 @@ class IncGraph(IncBase):
         return valid and (tmp_mol is not None)
 
     def get_atom_feature(self, atom):
+        """
+        This returns a one-hot tensor of the atom symbol and formal charge.
+        """
         f = torch.zeros(self.avocab.size())
         symbol, charge = atom.GetSymbol(), atom.GetFormalCharge()
         f[ self.avocab[(symbol,charge)] ] = 1
         return f.cuda()
 
     def get_mess_feature(self, atom, bond_type, nth_child):
+        """
+        returns a concatenated tensor of the atom feature, bond feature, and nth_child feature.
+        """
         f1 = torch.zeros(self.avocab.size())
         f2 = torch.zeros(len(MolGraph.BOND_LIST))
         f3 = torch.zeros(MolGraph.MAX_POS)
@@ -210,6 +258,20 @@ class IncGraph(IncBase):
         return torch.cat( [f1,f2,f3], dim=-1 ).cuda()
 
     def get_assm_cands(self, cluster, used, smiles):
+        """
+        Here, attach_points is a list of atom indices in the emol object that have atom_map number greater than 0 (in their case, it is just atom map of 1). 
+
+        anchor_smiles stores the ismiles corresponding to each individual anchor atom.
+
+        The last else condition:
+            - anchors is a list of atom indices in the emol object that have atom_map number 1 and any of their neighbors have atom_map number 0 ( these are defined here as anchor atoms).
+            - attach_points becomes now the original attach_points list minus the new anchor atoms.
+            - again, attach_points is modified to have the anchor atoms at the beginning and end of the list - i think what they are doing is maintainning a continuity for all attachment points by identifying 2 anchor atoms in the mol object and putting them as starting and ending points.
+            - anchor_smiles is the ismiles of the two corner anchor atoms.
+        
+            Now our attach_points list is a chain of atoms with the anchor atoms at the beginning and end. And anchor_smiles is the smiles of the two corner anchor atoms each one corresponding to its own atom map of 1. 
+
+        """
         emol = get_mol(smiles)
         if emol.GetNumAtoms() == 1:
             attach_points = [0]
@@ -232,6 +294,15 @@ class IncGraph(IncBase):
 
         assert len(anchors) <= 2
 
+        """ 
+        The cluster list is duplicated (cluster2 = cluster + cluster) to handle wrap-around indexing.
+        A sliding window of size inter_size is used to extract continuous fragments from cluster2.
+
+        Case 2 : >=2 attachment points, but the anchor SMILES are identical for the two anchor atoms. Here, the condition is to check if each possible tuple of cands - it should not be in the used list and it should satisfy the bond_match condition. This just checks if the corresponding atoms of the parent cluster are the same to the new attach_points. These set of cands are added to the cands list.
+
+        Case 3: >=2 attachment points, but the anchor SMILES are different for the two anchor atoms. It is the same as case-2. The only difference is that the cluster2 is reversed as well when the anchor smiles differ to account for all possible ways of joining fragments. 
+
+        """
         if inter_size == 1:
             cands = [ [x] for x in cluster if x not in used ]
 
