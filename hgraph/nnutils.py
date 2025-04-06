@@ -70,6 +70,35 @@ def index_scatter(sub_data, all_data, index):
     mask = torch.ones(d0, device=all_data.device).scatter_(0, index, 0)
     return all_data * mask.unsqueeze(-1) + buf
 
+def hier_topk_metal(cls_scores, icls_scores, vocab, topk):
+
+    batch_size = len(cls_scores)
+    cls_scores = F.log_softmax(cls_scores, dim=-1)
+    cls_scores = cls_scores[:,:-1]                      # ^ The last entry corresponds to iron which we do not want to consider while generating motifs. It is only the root motif. 
+                                                        #! Should be modified later on to expand to multi-metal complexes. 
+    cls_scores_topk, cls_topk = cls_scores.topk(topk, dim=-1)
+    final_topk = []
+    for i in range(topk):
+        clab = cls_topk[:, i]
+        mask = vocab.get_mask(clab)
+        masked_icls_scores = F.log_softmax(icls_scores + mask, dim=-1)
+        icls_scores_topk, icls_topk = masked_icls_scores.topk(topk, dim=-1)
+        topk_scores = cls_scores_topk[:, i].unsqueeze(-1) + icls_scores_topk
+        final_topk.append( (topk_scores, clab.unsqueeze(-1).expand(-1, topk), icls_topk) )
+
+    topk_scores, cls_topk, icls_topk = zip(*final_topk)
+    topk_scores = torch.cat(topk_scores, dim=-1)
+    cls_topk = torch.cat(cls_topk, dim=-1)
+    icls_topk = torch.cat(icls_topk, dim=-1)
+
+    topk_scores, topk_index = topk_scores.topk(topk, dim=-1)
+    batch_index = cls_topk.new_tensor([[i] * topk for i in range(batch_size)])
+    cls_topk = cls_topk[batch_index, topk_index]
+    icls_topk = icls_topk[batch_index, topk_index]
+    return topk_scores, cls_topk.tolist(), icls_topk.tolist()
+
+
+
 def hier_topk(cls_scores, icls_scores, vocab, topk):
     """
     designed to compute the top k heirarchical predictions based on cls and icls scores for a batch of data.
