@@ -51,12 +51,12 @@ class PairVocabMetal(object):
         Adding iron to the vocab object manually. both in the hmap and vmap.
         """
 
-        iron='Fe'
+        iron='[Fe]'
         hmap_iron=len(self.hmap)
         self.hmap[iron]=hmap_iron
         self.hvocab.append(iron)
 
-        iron_tuple=(iron, 'Fe:2')
+        iron_tuple=(iron, '[Fe:2]')
         vmap_iron=len(self.vmap)
         self.vmap[iron_tuple]=vmap_iron
         self.vocab.append(iron_tuple)
