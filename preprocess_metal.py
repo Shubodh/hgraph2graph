@@ -23,9 +23,9 @@ import rdkit
 
 def to_numpy(tensors):
     convert = lambda x : x.numpy() if type(x) is torch.Tensor else x
-    a,b,c = tensors
+    a,b,c,d = tensors
     b = [convert(x) for x in b[0]], [convert(x) for x in b[1]]
-    return a, b, c
+    return a, b, c, d
 
 # DO NOT iterate over complexes names when the total data size is lesser than the pool that ur using because then it will iterate over the characters instead of the molecules in total. 
 
