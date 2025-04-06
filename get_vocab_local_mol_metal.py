@@ -236,7 +236,7 @@ if __name__=="__main__":
         highlights_ligand_mol=mol_ligands_highlights_indexmap[mol]
         vocab=process(mol,ligand_mols,highlights_ligand_mol)
         vocab_list.append(vocab)
-        print(i)
+        # print(i)
     vocab = [(x, y) for vocab_set in vocab_list for x, y in vocab_set]
     vocab = list(set(vocab))
     os.makedirs(vocab_folder, exist_ok=True)
