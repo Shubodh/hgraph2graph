@@ -14,5 +14,5 @@ from hgraph.decoder_metal import HierMPNDecoderMetal
 
 # new imports for dist
 from hgraph.hgnn_metal import HierVAEMetalDist
-from hgraph.encoder_metal_dist import HierMPNEncoderMetalDist
+from hgraph.encoder_metal_dist import HierMPNEncoderMetalDist, IncHierMPNEncoderMetalDist_DistancePrediction
 from hgraph.decoder_metal_dist import HierMPNDecoderMetalDist
