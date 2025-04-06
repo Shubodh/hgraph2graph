@@ -158,7 +158,7 @@ class MolGraphMetal(object):
             ring_size = len(ring)
             if ring_size > 2 and ring_size < 7:
                 clusters.append(tuple(ring))
-                
+
         if clusters and 0 not in clusters[0]: #root is not node[0]
             for i,cls in enumerate(clusters):
                 if 0 in cls:
@@ -188,7 +188,6 @@ class MolGraphMetal(object):
         highlight_atoms=self.highlight
         flagged_motifs = []
         flagged_atoms = []
-        print(clusters_tree)
 
         for i in range(len(clusters_tree)):
             graph.add_node(i)
@@ -245,9 +244,7 @@ class MolGraphMetal(object):
             mst=graph
         else:
             mst=nx.maximum_spanning_tree(graph) #must be connected
-        print(flagged_atoms)
-        # assert sorted(flagged_atoms) == sorted(highlight_atoms)
-        # print("assertion passed")
+        assert sorted(flagged_atoms) == sorted(highlight_atoms)
         return mst, flagged_motifs
 
 
