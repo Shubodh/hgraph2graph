@@ -92,6 +92,25 @@ def get_sub_mol(mol, sub_atoms):
 
     return new_mol.GetMol()
 
+def get_sub_mol_metal(mol, sub_atoms, mol_bonds):
+    new_mol = Chem.RWMol()
+    atom_map = {}
+    for idx in sub_atoms:
+        atom = mol.GetAtomWithIdx(idx)
+        atom_map[idx] = new_mol.AddAtom(atom)
+
+    sub_atoms = set(sub_atoms)
+    for idx in sub_atoms:
+        a = mol.GetAtomWithIdx(idx)
+        for b in a.GetNeighbors():
+            if b.GetIdx() not in sub_atoms: continue
+            bond = mol.GetBondBetweenAtoms(a.GetIdx(), b.GetIdx())
+            bt = bond.GetBondType()
+            if a.GetIdx() < b.GetIdx(): #each bond is enumerated twice
+                new_mol.AddBond(atom_map[a.GetIdx()], atom_map[b.GetIdx()], bt)
+
+    return new_mol.GetMol()
+
 def copy_edit_mol(mol):
     new_mol = Chem.RWMol(Chem.MolFromSmiles(''))
     for atom in mol.GetAtoms():
@@ -235,15 +254,16 @@ def get_inter_label_metal(mol,atoms,inter_atoms,highlight_atoms_ligand):
     except:
         return None,inter_label
             
-def get_anchor_smiles_metal(mol, anchor, highlights, idxfunc=idxfunc):
+def get_anchor_smiles_metal(mol, anchor, metal_ponits, idxfunc=idxfunc):
     copy_mol = Chem.Mol(mol)
     for a in copy_mol.GetAtoms():
-        if a.GetIdx() in highlights:
+        idx = idxfunc(a)
+        if idx in metal_ponits:
             a.SetAtomMapNum(2)
+        elif idx == anchor:
+            a.SetAtomMapNum(1)
         else:
-            idx = idxfunc(a)
-            if idx == anchor: a.SetAtomMapNum(1)
-            else: a.SetAtomMapNum(0)
+            a.SetAtomMapNum(0)
 
     return get_smiles(copy_mol)
 
