@@ -392,8 +392,8 @@ class IncHierMPNEncoderMetalDist(HierMPNEncoderMetalDist):
             """
             node_buf = torch.zeros(num_nodes, self.hidden_size, device=fmess.device)
             node_buf = index_scatter(hnode, node_buf, subnode)
-            fmess_int = fmess[:, :4].int()  # Shape: [n, 4], dtype: int32
-            fdist = fmess[:, 4].unsqueeze(1)  # Shape: [n, 1]
+            fmess_int = fmess[:, :-1].int()  # Shape: [n, 4], dtype: int32
+            fdist = fmess[:, -1].unsqueeze(1)  # Shape: [n, 1]
             hmess = node_buf.index_select(index=fmess_int[:, 0], dim=0)
             pos_vecs = self.E_pos.index_select(0, fmess_int[:, 2])
             hmess = torch.cat( [hmess, pos_vecs, fdist], dim=-1 ) # added tree level edge distances to the message embeddings in hmess.
