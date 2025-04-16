@@ -1180,6 +1180,6 @@ class HierMPNDecoderMetalDist(nn.Module):
             # create subtree and subgraph - message passing for new nodes and edges in the motif level and the graph level. 
             # predict distances for these new edges. 
             # update the fmess for these new edges with the distances.
-
-        return graph_batch.get_mol()
+        dirname = "metal_chelate_generated_complexes"
+        return graph_batch.get_mol(dirname, root_indices_graph)
 

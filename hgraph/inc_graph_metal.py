@@ -4,6 +4,7 @@ import networkx as nx
 from hgraph.mol_graph_metal import MolGraphMetal
 from hgraph.chemutils import *
 from collections import defaultdict
+import os
 
 class IncBaseMetal(object):
     """
@@ -126,6 +127,7 @@ class IncGraphMetal(IncBaseMetal):
         self.fmess = self.fmess.float()
         self.batch = defaultdict(list)
         self.batch_highlights = defaultdict(list)
+        self.predicted_distances = {}
         self.mol_bonds = {}
     
     def connect_ligand(self, bid, tree_idx, graph_idx):
@@ -141,18 +143,35 @@ class IncGraphMetal(IncBaseMetal):
         
         # return new_bonds
 
-    def get_mol(self):
-        mol_list = [None] * len(self.batch)
+    def get_mol(self, dirname, root_indices_graph):
+        if not os.path.exists(dirname):
+                os.makedirs(dirname)
+
         for batch_idx, batch_atoms in self.batch.items():
-            mol = get_sub_mol(self.mol, batch_atoms)
-            mol = sanitize(mol, kekulize=False)
-            if mol is None: 
-                mol_list[batch_idx] = None
-            else:
-                for atom in mol.GetAtoms():
-                    atom.SetAtomMapNum(0)
-                mol_list[batch_idx] = Chem.MolToSmiles(mol)
-        return mol_list
+            n_atoms = len(batch_atoms)
+
+            atom_mapping = {atom_id: i for i, atom_id in enumerate(batch_atoms)}
+
+            bond_dist_dict = self.predicted_distances[batch_idx]  # {(a1, a2): distance}
+            edge_list = []
+            for (a1, a2), dist in bond_dist_dict.items():
+                edge_list.append((atom_mapping[a1], atom_mapping[a2], dist))
+            
+            atom_labels = []
+            root_atom = 0
+            for idx in batch_atoms:
+                atom = self.mol.GetAtomWithIdx(idx)
+                atom_labels.append(atom.GetSymbol())  # or use any other label you want
+                if idx in root_indices_graph:
+                    root_atom = atom_mapping[idx]
+
+            recover_coordinates(
+                n_atoms=n_atoms,
+                edge_list=edge_list,
+                root_atom=root_atom,
+                export_xyz_path=f"{dirname}/mol_{batch_idx}.xyz",  # Optional export
+                atom_labels=atom_labels
+            )
 
     def get_tensors(self):
         return self.fnode, self.fmess, self.agraph, self.bgraph, None 
