@@ -126,7 +126,6 @@ class IncGraphMetal(IncBaseMetal):
         self.fmess = self.fmess.float()
         self.batch = defaultdict(list)
         self.batch_highlights = defaultdict(list)
-        
         self.mol_bonds = {}
     
     def connect_ligand(self, bid, tree_idx, graph_idx):
@@ -179,13 +178,12 @@ class IncGraphMetal(IncBaseMetal):
                     self.add_edge(idx, root_atom_index, self.get_mess_feature(self.mol.GetAtomWithIdx(idx), 4, 0) )
                     new_bonds.extend( [ self.edge_dict[(root_atom_index, idx)], self.edge_dict[(idx, root_atom_index)] ] )
         
-        return new_atoms, new_bonds, attached, highlight_atoms
+        return new_atoms, new_bonds, attached, highlight_atoms, new_bonds
 
 
     def add_mol(self, batch_idx, smiles, inter_label, nth_child, root_atom_index = None, fa_cluster = None, fa_used = None, fa_highlight = None):
         emol = get_mol(smiles)
 
-        ## todo - two hop mai attached wale nahi consider honge. But jo attached nahi huye, unko highlight mai hi rakho and attached mai mat add karo. sirf unhi ko attached mai add karo jinka dissolve hogaya hai. 
 
         # ^ new code 
         atom_map_highlight = {}
@@ -209,6 +207,7 @@ class IncGraphMetal(IncBaseMetal):
         atom_map.update(atom_map_highlight) #^ Added this to club :2 atoms as well.
         new_atoms, new_bonds, attached = [], [], []
         highlight_atoms = [] 
+        bonds_for_prediction = []
 
         for atom in emol.GetAtoms(): #atoms must be inserted in order given by emol.GetAtoms() (for rings assembly)
             if atom.GetIdx() in atom_map: 
@@ -243,6 +242,9 @@ class IncGraphMetal(IncBaseMetal):
                 
                 self.add_edge(a1, a2, self.get_mess_feature(bond.GetBeginAtom(), bond_type, nth_child if a2 in attached else 0) ) #only child to father node (in intersection) have non-zero nth_child
                 self.add_edge(a2, a1, self.get_mess_feature(bond.GetEndAtom(), bond_type, nth_child if a1 in attached else 0) ) 
+
+                bonds_for_prediction.extend( [ self.edge_dict[(a1,a2)], self.edge_dict[(a2,a1)] ] )
+
             else:
                 attached.extend( [(a1,a2),(a2,a1)] )
             new_bonds.extend( [ self.edge_dict[(a1,a2)], self.edge_dict[(a2,a1)] ] )
@@ -258,7 +260,7 @@ class IncGraphMetal(IncBaseMetal):
 
         if emol.GetNumAtoms() == 1: #singletons always attached = []
             attached = []
-        return new_atoms, new_bonds, attached, highlight_atoms
+        return new_atoms, new_bonds, attached, highlight_atoms, bonds_for_prediction
 
     #validity check function
     def try_add_mol(self, batch_idx, smiles, inter_label, fa_cluster = None, fa_used = None, fa_highlight = None):

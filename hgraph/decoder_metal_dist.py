@@ -1079,6 +1079,7 @@ class HierMPNDecoderMetalDist(nn.Module):
             
             # new_atoms_expandlist = []
             # new_motifs_expandlist = []
+            new_bonds_expandlist = []
             for i,bid in enumerate(expand_list):
                 new_node, fa_node = stack[bid][-1], stack[bid][-2]
 
@@ -1105,7 +1106,8 @@ class HierMPNDecoderMetalDist(nn.Module):
                         if ':2' not in ismiles:
                             continue
                         else :
-                            new_atoms, new_bonds, attached, new_highlight_atoms = graph_batch.add_primary_mol(bid, ismiles, root_indices_graph[bid])
+                            new_atoms, new_bonds, attached, new_highlight_atoms, bonds_to_predict = graph_batch.add_primary_mol(bid, ismiles, root_indices_graph[bid])
+                            new_bonds_expandlist.extend(bonds_to_predict)
                             tree_batch.register_cgraph(new_node, new_atoms, new_bonds, attached, new_highlight_atoms)
                             success= True
                             continue
@@ -1123,7 +1125,8 @@ class HierMPNDecoderMetalDist(nn.Module):
                     # ^ if the inter_cands is empty, then that means either all the atoms of the new cluster are :2 or there is a combination of :2 atoms and :0 atoms (basically, no :1). Now, we can still try to attach it to the parent cluster depending on whether there are compatible atoms in the parent cluster (enough :2 atoms) for it. 
                     if len(inter_cands) == 0:
                         if graph_batch.try_add_mol(bid, ismiles, [], fa_cluster, fa_used, fa_highlight):
-                            new_atoms, new_bonds, attached, new_highlight_atoms = graph_batch.add_mol(bid, ismiles, [], 0, root_indices_graph[bid], fa_cluster, fa_used, fa_highlight)
+                            new_atoms, new_bonds, attached, new_highlight_atoms, bonds_to_predict = graph_batch.add_mol(bid, ismiles, [], 0, root_indices_graph[bid], fa_cluster, fa_used, fa_highlight)
+                            new_bonds_expandlist.extend(bonds_to_predict)
                             tree_batch.register_cgraph(new_node, new_atoms, new_bonds, attached, new_highlight_atoms)
                             success = True
                             continue
@@ -1149,9 +1152,12 @@ class HierMPNDecoderMetalDist(nn.Module):
                         inter_label = list(zip(inter_label, attach_points))
                         if graph_batch.try_add_mol(bid, ismiles, inter_label):
                             if complete_ligand:
-                                new_atoms, new_bonds, attached, new_highlight_atoms = graph_batch.add_mol(bid, ismiles, inter_label, nth_child, root_indices_graph[bid])
+                                new_atoms, new_bonds, attached, new_highlight_atoms, bonds_to_predict = graph_batch.add_mol(bid, ismiles, inter_label, nth_child, root_indices_graph[bid])
+                                new_bonds_expandlist.extend(bonds_to_predict)
                             else:
-                                new_atoms, new_bonds, attached, new_highlight_atoms = graph_batch.add_mol(bid, ismiles, inter_label, nth_child, root_indices_graph[bid], fa_cluster, fa_used, fa_highlight)
+                                new_atoms, new_bonds, attached, new_highlight_atoms, bonds_to_predict = graph_batch.add_mol(bid, ismiles, inter_label, nth_child, root_indices_graph[bid], fa_cluster, fa_used, fa_highlight)
+                                new_bonds_expandlist.extend(bonds_to_predict)
+                                
                             tree_batch.register_cgraph(new_node, new_atoms, new_bonds, attached, new_highlight_atoms)
                             tree_batch.update_attached(fa_node, inter_label) # ^ This is not modified for :2 atoms because it is possible for the :2 atom in parent motif to have more children attached to itself through another motif possibly. (Im not really sure, need to try with different motifs and check what output comes up.)
                             success = True
