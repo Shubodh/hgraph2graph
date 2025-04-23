@@ -23,6 +23,7 @@ class IncBaseMetal(object):
         self.graph = nx.DiGraph()
         self.graph.add_node(0) #make sure node is 1 index
         self.edge_dict = {None : 0} #make sure edge is 1 index
+        self.edge_atom_dict = {None : 0} #make sure edge is 1 index
 
         # self.fnode = torch.zeros(max_nodes * batch_size, node_fdim).long().cuda()
         self.fnode = torch.zeros(max_nodes * batch_size, node_fdim).long()
@@ -62,6 +63,7 @@ class IncBaseMetal(object):
 
         self.graph.add_edge(i, j)
         self.edge_dict[(i,j)] = idx = len(self.edge_dict)
+        self.edge_atom_dict[idx] = (i,j)
 
         self.agraph[j, self.graph.in_degree(j) - 1] = idx
         if feature is not None:
@@ -76,6 +78,15 @@ class IncBaseMetal(object):
             self.bgraph[nei_idx, self.graph.in_degree(j) - 2] = idx
 
         return idx
+    
+    def get_atom_pair(self, bond_idx):
+        """
+        Get the atom pair corresponding to the bond index. This will return a tuple of the atom-pair. 
+        """
+        if bond_idx in self.edge_atom_dict:
+            return self.edge_atom_dict[bond_idx]
+        else:
+            raise ValueError(f"Bond index {bond_idx} not found in edge_atom_dict.")
 
 
 class IncTreeMetal(IncBaseMetal):
@@ -161,7 +172,10 @@ class IncGraphMetal(IncBaseMetal):
             root_atom = 0
             for idx in batch_atoms:
                 atom = self.mol.GetAtomWithIdx(idx)
-                atom_labels.append(atom.GetSymbol())  # or use any other label you want
+                if atom.GetSymbol() == '[Fe]':
+                    atom_labels.append('Fe')
+                else:
+                    atom_labels.append(atom.GetSymbol())  # or use any other label you want
                 if idx in root_indices_graph:
                     root_atom = atom_mapping[idx]
 
@@ -179,6 +193,7 @@ class IncGraphMetal(IncBaseMetal):
     def add_primary_mol(self, batch_idx, smiles, root_atom_index):
         emol = get_mol(smiles)
         new_atoms, new_bonds, attached, highlight_atoms = [], [], [], []
+        bonds_for_prediciton = []
         for atom in emol.GetAtoms():
             new_atom = copy_atom(atom)
             new_atom.SetAtomMapNum( batch_idx ) 
@@ -195,9 +210,9 @@ class IncGraphMetal(IncBaseMetal):
                     self.mol_bonds[(root_atom_index, idx)] = self.mol_bonds[(idx, root_atom_index)] = 4 
                     self.add_edge(root_atom_index, idx, self.get_mess_feature(self.mol.GetAtomWithIdx(root_atom_index), 4, 0) ) # 4 is just for the representation of the new type of bond. 
                     self.add_edge(idx, root_atom_index, self.get_mess_feature(self.mol.GetAtomWithIdx(idx), 4, 0) )
-                    new_bonds.extend( [ self.edge_dict[(root_atom_index, idx)], self.edge_dict[(idx, root_atom_index)] ] )
+                    bonds_for_prediciton.append(self.edge_dict[(root_atom_index, idx)])
         
-        return new_atoms, new_bonds, attached, highlight_atoms, new_bonds
+        return new_atoms, new_bonds, attached, highlight_atoms, bonds_for_prediciton
 
 
     def add_mol(self, batch_idx, smiles, inter_label, nth_child, root_atom_index = None, fa_cluster = None, fa_used = None, fa_highlight = None):
@@ -262,7 +277,7 @@ class IncGraphMetal(IncBaseMetal):
                 self.add_edge(a1, a2, self.get_mess_feature(bond.GetBeginAtom(), bond_type, nth_child if a2 in attached else 0) ) #only child to father node (in intersection) have non-zero nth_child
                 self.add_edge(a2, a1, self.get_mess_feature(bond.GetEndAtom(), bond_type, nth_child if a1 in attached else 0) ) 
 
-                bonds_for_prediction.extend( [ self.edge_dict[(a1,a2)], self.edge_dict[(a2,a1)] ] )
+                bonds_for_prediction.append(self.edge_dict[(a1,a2)])
 
             else:
                 attached.extend( [(a1,a2),(a2,a1)] )
