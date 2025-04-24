@@ -138,7 +138,7 @@ class IncGraphMetal(IncBaseMetal):
         self.fmess = self.fmess.float()
         self.batch = defaultdict(list)
         self.batch_highlights = defaultdict(list)
-        self.predicted_distances = {}
+        self.predicted_distances = defaultdict(dict)
         self.mol_bonds = {}
     
     def connect_ligand(self, bid, tree_idx, graph_idx):
