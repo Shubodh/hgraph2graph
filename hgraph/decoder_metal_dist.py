@@ -6,6 +6,7 @@ from hgraph.nnutils import *
 from hgraph.encoder_metal_dist import IncHierMPNEncoderMetalDist, IncHierMPNEncoderMetalDist_DistancePrediction
 from hgraph.mol_graph_metal import MolGraphMetal
 from hgraph.inc_graph_metal import IncTreeMetal, IncGraphMetal
+from collections import defaultdict
 
 class HTuple():
     def __init__(self, node=None, mess=None, vmask=None, emask=None):
@@ -927,16 +928,16 @@ class HierMPNDecoderMetalDist(nn.Module):
         hgraph = HTuple( mess = self.rnn_cell.get_init_state(graph_tensors[1]) )
 
         # ^ new tensors for the motif distance prediction.
-        # tree_tensors_motif = tree_batch.get_tensors()
-        # graph_tensors_motif = graph_batch.get_tensors()
+        tree_tensors_motif = tree_batch.get_tensors()
+        graph_tensors_motif = graph_batch.get_tensors()
 
-        # htree_motif = HTuple( mess = self.rnn_cell_motif.get_init_state(tree_tensors[1]) )
-        # hinter_motif = HTuple( mess = self.rnn_cell_motif.get_init_state(tree_tensors[1]) )
-        # hgraph_motif = HTuple( mess = self.rnn_cell_motif.get_init_state(graph_tensors[1]) )
+        htree_motif = HTuple( mess = self.rnn_cell_motif.get_init_state(tree_tensors[1]) )
+        hinter_motif = HTuple( mess = self.rnn_cell_motif.get_init_state(tree_tensors[1]) )
+        hgraph_motif = HTuple( mess = self.rnn_cell_motif.get_init_state(graph_tensors[1]) )
         # ^
         # ^ new tensors for the atom distance prediction.
-        # hgraph_atom=HTuple(mess = self.rnn_cell_atom.get_init_state(graph_tensors[1]))
-        # graph_tensors_atom=graph_batch.get_tensors()
+        graph_tensors_atom=graph_batch.get_tensors()
+        hgraph_atom=HTuple(mess = self.rnn_cell_atom.get_init_state(graph_tensors_atom[1]))
 
         h = self.rnn_cell.get_hidden_state(htree.mess)
         h[1 : batch_size + 1] = init_vecs #wiring root (only for tree, not inter)
@@ -987,6 +988,7 @@ class HierMPNDecoderMetalDist(nn.Module):
             
             # ^ Mofifying the batch list based on whether more ligands need to be predicted for those complexes or not.
             batch_list = [ bid for bid in batch_list if ligand_count_pred[bid] > 0]
+            if len(batch_list) == 0: break
 
 
             batch_idx = batch_idx.new_tensor(batch_list)
@@ -994,15 +996,12 @@ class HierMPNDecoderMetalDist(nn.Module):
             subtree = batch_idx.new_tensor(cur_tree_nodes), batch_idx.new_tensor([])
             subgraph = batch_idx.new_tensor( tree_batch.get_cluster_nodes(cur_tree_nodes) ), batch_idx.new_tensor( tree_batch.get_cluster_edges(cur_tree_nodes) )
 
-            # subtree_motif = batch_idx.new_tensor(cur_tree_nodes), batch_idx.new_tensor([])
-            # subgraph_motif = batch_idx.new_tensor( tree_batch.get_cluster_nodes(cur_tree_nodes) ), batch_idx.new_tensor( tree_batch.get_cluster_edges(cur_tree_nodes) )
-
-            # subgraph_atom = batch_idx.new_tensor( tree_batch.get_cluster_nodes(cur_tree_nodes) ), batch_idx.new_tensor( tree_batch.get_cluster_edges(cur_tree_nodes) )
+            subtree_motif = batch_idx.new_tensor(cur_tree_nodes), batch_idx.new_tensor([])
+            subgraph_motif = batch_idx.new_tensor( tree_batch.get_cluster_nodes(cur_tree_nodes) ), batch_idx.new_tensor( tree_batch.get_cluster_edges(cur_tree_nodes) )
 
             htree, hinter, hgraph = self.hmpn(tree_tensors, tree_tensors, graph_tensors, htree, hinter, hgraph, subtree, subgraph)
-            # htree_motif, hinter_motif, hgraph_motif = self.hmpn_motifdist(tree_tensors_motif, tree_tensors_motif, graph_tensors_motif, htree_motif, hinter_motif, hgraph_motif, subtree_motif, subgraph_motif)
+            htree_motif, hinter_motif, hgraph_motif = self.hmpn_motifdist(tree_tensors_motif, tree_tensors_motif, graph_tensors_motif, htree_motif, hinter_motif, hgraph_motif, subtree_motif, subgraph_motif)
 
-            # hgraph_atom=self.hmpn_distances(graph_tensors_atom,hgraph_atom,subgraph_atom)
             print("first message passing is done")
 
             topo_scores = self.get_topo_score(src_tree_vecs, batch_idx, htree.node.index_select(0, subtree[0]))
@@ -1013,7 +1012,8 @@ class HierMPNDecoderMetalDist(nn.Module):
                 topo_preds = torch.bernoulli(topo_scores).tolist()
 
             new_mess = []
-            new_motif_mess = []
+            new_motif_bond = {}
+            new_motif_atom_pair = {}
             expand_list = []
 
             """
@@ -1027,6 +1027,8 @@ class HierMPNDecoderMetalDist(nn.Module):
                     new_edge = tree_batch.add_edge(stack[bid][-1], new_node, edge_feature) 
                     stack[bid].append(new_node)
                     new_mess.append(new_edge)
+                    new_motif_atom_pair[bid] = (stack[bid][-2], stack[bid][-1]) #parent and child
+                    new_motif_bond[bid] = new_edge
                 else:
                     child = stack[bid].pop()
                     if len(stack[bid]) > 0:
@@ -1052,18 +1054,6 @@ class HierMPNDecoderMetalDist(nn.Module):
             # exit(0)
 
             """
-            * Now that the second message passing is done between the new motifs and the parent motifs or the backtracked motifs from the child edge, what we need to do now is predict the distances at the tree level for these new edges in the tree and update the fmess for these new edges. Remember that at the tree level we are still using the hidden state of the usual htree itself to predict the distances.
-
-            ! I think this step needs to be done after we perform the cluster prediction 
-            """
-
-            # for i in range(len(subtree[1])):
-            #     predicted_distance = self.W_dist_motifs(cur_mess_motifs[i])
-            #     prev_feature = tree_batch.fmess[subtree[1][i]]
-            #     new_feature = torch.cat([prev_feature[:4], predicted_distance], dim=0)
-            #     tree_batch.fmess[subtree[1][i]] = new_feature
-
-            """
             The code below involves only the new edges discovered in the forward pass and not the backward edges i.e. only the expand_list. For the forward new edges that are discovered in the previous step, those hidden state mess tensors are taken and they are now used along with the latent space vectors to calculate cls and icls scores for each of the corresponding new edge. Now these cls_scores and icls_scores are sent to the hier_topk function and the combined scores along with top-k individual scores of cls and icls are returned. 
             """
             if len(expand_list) > 0:
@@ -1077,9 +1067,7 @@ class HierMPNDecoderMetalDist(nn.Module):
                     scores = torch.exp(scores) #score is output of log_softmax
                     shuf_idx = torch.multinomial(scores, beam, replacement=True).tolist()
             
-            # new_atoms_expandlist = []
-            # new_motifs_expandlist = []
-            new_bonds_expandlist = []
+            new_bonds_expandlist = defaultdict(list)
             for i,bid in enumerate(expand_list):
                 new_node, fa_node = stack[bid][-1], stack[bid][-2]
 
@@ -1107,7 +1095,7 @@ class HierMPNDecoderMetalDist(nn.Module):
                             continue
                         else :
                             new_atoms, new_bonds, attached, new_highlight_atoms, bonds_to_predict = graph_batch.add_primary_mol(bid, ismiles, root_indices_graph[bid])
-                            new_bonds_expandlist.extend(bonds_to_predict)
+                            new_bonds_expandlist[bid].extend(bonds_to_predict)
                             tree_batch.register_cgraph(new_node, new_atoms, new_bonds, attached, new_highlight_atoms)
                             success= True
                             continue
@@ -1126,7 +1114,7 @@ class HierMPNDecoderMetalDist(nn.Module):
                     if len(inter_cands) == 0:
                         if graph_batch.try_add_mol(bid, ismiles, [], fa_cluster, fa_used, fa_highlight):
                             new_atoms, new_bonds, attached, new_highlight_atoms, bonds_to_predict = graph_batch.add_mol(bid, ismiles, [], 0, root_indices_graph[bid], fa_cluster, fa_used, fa_highlight)
-                            new_bonds_expandlist.extend(bonds_to_predict)
+                            new_bonds_expandlist[bid].extend(bonds_to_predict)
                             tree_batch.register_cgraph(new_node, new_atoms, new_bonds, attached, new_highlight_atoms)
                             success = True
                             continue
@@ -1153,10 +1141,10 @@ class HierMPNDecoderMetalDist(nn.Module):
                         if graph_batch.try_add_mol(bid, ismiles, inter_label):
                             if complete_ligand:
                                 new_atoms, new_bonds, attached, new_highlight_atoms, bonds_to_predict = graph_batch.add_mol(bid, ismiles, inter_label, nth_child, root_indices_graph[bid])
-                                new_bonds_expandlist.extend(bonds_to_predict)
+                                new_bonds_expandlist[bid].extend(bonds_to_predict)
                             else:
                                 new_atoms, new_bonds, attached, new_highlight_atoms, bonds_to_predict = graph_batch.add_mol(bid, ismiles, inter_label, nth_child, root_indices_graph[bid], fa_cluster, fa_used, fa_highlight)
-                                new_bonds_expandlist.extend(bonds_to_predict)
+                                new_bonds_expandlist[bid].extend(bonds_to_predict)
                                 
                             tree_batch.register_cgraph(new_node, new_atoms, new_bonds, attached, new_highlight_atoms)
                             tree_batch.update_attached(fa_node, inter_label) # ^ This is not modified for :2 atoms because it is possible for the :2 atom in parent motif to have more children attached to itself through another motif possibly. (Im not really sure, need to try with different motifs and check what output comes up.)
@@ -1164,10 +1152,11 @@ class HierMPNDecoderMetalDist(nn.Module):
                             break
 
                 if not success: #force backtrack
+                    del new_motif_atom_pair[bid]
+                    del new_motif_bond[bid]
                     child = stack[bid].pop() #pop the dummy new_node which can't be added
                     nth_child = tree_batch.graph.in_degree(stack[bid][-1]) 
-                    edge_distance = tree_batch.fmess[tree_batch.edge_dict[(stack[bid][-1], child)]][-1]
-                    edge_feature = batch_idx.new_tensor( [child, stack[bid][-1], nth_child, edge_distance] )
+                    edge_feature = batch_idx.new_tensor( [child, stack[bid][-1], nth_child, 0] ) # not adding distance here for the reverse edge between dummy node and parent node because it has not been established yet and thus it is not known.
                     new_edge = tree_batch.add_edge(child, stack[bid][-1], edge_feature)
 
                     child = stack[bid].pop() 
@@ -1176,6 +1165,42 @@ class HierMPNDecoderMetalDist(nn.Module):
                         edge_distance = tree_batch.fmess[tree_batch.edge_dict[(stack[bid][-1], child)]][-1]
                         edge_feature = batch_idx.new_tensor( [child, stack[bid][-1], nth_child, edge_distance] )
                         new_edge = tree_batch.add_edge(child, stack[bid][-1], edge_feature)
+            
+            if any(new_motif_bond.values()):
+                subtree_motif = subtree_motif[0], batch_idx.new_tensor(list(new_motif_bond.values())) 
+                subgraph_motif = [], []
+                htree_motif, hinter_motif, hgraph_motif = self.hmpn_motifdist(tree_tensors_motif, tree_tensors_motif, graph_tensors_motif, htree_motif, hinter_motif, hgraph_motif, subtree_motif, subgraph_motif)
+
+                hmess_motif = self.rnn_cell_motif.get_hidden_state(htree_motif.mess)
+
+                for bid, bond_idx in new_motif_bond.items():
+                    edge_distance = self.W_dist_motifs(hmess_motif[bond_idx])
+                                # for i in range(len(subtree[1])):
+                    prev_feature = tree_batch.fmess[bond_idx]
+                    new_feature = torch.cat([prev_feature[:3], edge_distance], dim=0)
+                    tree_batch.fmess[bond_idx] = new_feature
+
+            if any(new_bonds_expandlist.values()):
+                atom_pairs = defaultdict(list)
+                prediction_atoms = []
+                for bid, bond_indices in new_bonds_expandlist.items():
+                    for bond_idx in bond_indices:
+                        atom_pair = graph_batch.get_atom_pair(bond_idx)
+                        atom_pairs[bid].append(atom_pair)
+                        prediction_atoms.append(atom_pair[0])
+                        prediction_atoms.append(atom_pair[1])
+
+                prediction_atoms = list(set(prediction_atoms)) # just to ensure there are no duplicates. 
+                subgraph_atoms = batch_idx.new_tensor(prediction_atoms), batch_idx.new_tensor(new_bonds_expandlist)
+
+                hgraph_atom = self.hmpn_distances(graph_tensors_atom, hgraph_atom, subgraph_atoms)
+                hmess_atom = self.rnn_cell_atom.get_hidden_state(hgraph_atom.mess)
+
+                for bid, bond_indices in new_bonds_expandlist.items():
+                    for i, bond_idx in enumerate(bond_indices):
+                        edge_distance = self.W_dist(hmess_atom[bond_idx])
+                        graph_batch.predicted_distances[bid][atom_pairs[bid][i]] = edge_distance
+
 
             # create subtree and subgraph - message passing for new nodes and edges in the motif level and the graph level. 
             # predict distances for these new edges. 
