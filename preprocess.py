@@ -41,7 +41,7 @@ if __name__ == "__main__":
     parser.add_argument('--train', required=True)
     parser.add_argument('--vocab', required=True)
     parser.add_argument('--batch_size', type=int, default=32)
-    parser.add_argument('--mode', type=str, default='pair')
+    parser.add_argument('--mode', type=str, default='single')
     parser.add_argument('--ncpu', type=int, default=8)
     args = parser.parse_args()
 
@@ -99,6 +99,8 @@ if __name__ == "__main__":
         with open(args.train) as f:
             data = [line.strip("\r\n ").split()[0] for line in f]
 
+        print("Total data ", len(data))
+        print("Batch size ", args.batch_size)
         random.shuffle(data)
 
         batches = [data[i : i + args.batch_size] for i in range(0, len(data), args.batch_size)]
@@ -107,7 +109,10 @@ if __name__ == "__main__":
         print("All data recieved ")
         num_splits = len(all_data) // 1000
 
+        print("Total number of all data: ", len(all_data))
+        print("Number of splits: ", num_splits)
         le = (len(all_data) + num_splits - 1) // num_splits
+        print("Length of each split: ", le)
 
         print("Number of splits: ", num_splits)
 
@@ -117,4 +122,7 @@ if __name__ == "__main__":
 
             with open('tensors-%d.pkl' % split_id, 'wb') as f:
                 pickle.dump(sub_data, f, pickle.HIGHEST_PROTOCOL)
+            print("Dumped split ", split_id)
+        
+        torch.cuda.empty_cache()
 
