@@ -11,3 +11,12 @@ output_file = 'data/chembl/all_vsmall.txt'  # Replace with your desired output f
 n = 20000  # Change this to the number of lines you want to extract
 
 extract_first_n_lines(input_file, output_file, n)
+
+# import pickle
+
+# # Open the .pkl file and load the data
+# with open('tensors-1.pkl', 'rb') as f:
+#     data = pickle.load(f)
+
+# # Check the length of the loaded data
+# print(f"Length of the data in tensors-0.pkl: {len(data)}")
