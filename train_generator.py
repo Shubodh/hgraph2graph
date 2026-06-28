@@ -91,7 +91,8 @@ meters = np.zeros(6)
 for epoch in range(args.epoch):
     dataset = DataFolder(args.train, args.batch_size)
 
-    for batch in tqdm(dataset):
+    for batch in dataset:
+        print(len(batch))
         total_step += 1
         model.zero_grad()
         loss, kl_div, wacc, iacc, tacc, sacc = model(*batch, beta=beta)

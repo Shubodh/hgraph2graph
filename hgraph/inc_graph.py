@@ -154,8 +154,12 @@ class IncGraph(IncBase):
         emol = get_mol(smiles)
         atom_map = {y : x for x,y in inter_label}
         new_atoms, new_bonds, attached = [], [], []
+        print("inside add_mol")
+
+        print("Atoms in emol")
 
         for atom in emol.GetAtoms(): #atoms must be inserted in order given by emol.GetAtoms() (for rings assembly)
+            print(atom.GetIdx(), atom.GetSymbol(), atom.GetAtomMapNum())
             if atom.GetIdx() in atom_map: 
                 idx = atom_map[atom.GetIdx()]
                 new_atoms.append(idx)
@@ -170,6 +174,8 @@ class IncGraph(IncBase):
                 self.batch[batch_idx].append(idx)
                 if atom.GetAtomMapNum() > 0: attached.append(idx)
 
+        print("Atom Map")
+        print(atom_map)
         for bond in emol.GetBonds():
             a1 = atom_map[bond.GetBeginAtom().GetIdx()]
             a2 = atom_map[bond.GetEndAtom().GetIdx()]
@@ -277,7 +283,11 @@ class IncGraph(IncBase):
             attach_points = [0]
         else:
             attach_points = [atom.GetIdx() for atom in emol.GetAtoms() if atom.GetAtomMapNum() > 0]
-
+        
+        print("Attach Points : ", attach_points)
+        print('Atoms of the new smiles')        
+        for atom in emol.GetAtoms():
+            print(atom.GetIdx(), atom.GetSymbol(), atom.GetFormalCharge(), atom.GetAtomMapNum())
         inter_size = len(attach_points)
         idxfunc = lambda x:x.GetIdx()
         anchors = attach_points
